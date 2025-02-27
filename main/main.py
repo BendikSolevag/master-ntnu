@@ -7,9 +7,6 @@ from collections import deque
 from environment import SalmonFarmEnv
 
 
-# ---------------------------
-# 2) NEURAL NETWORK DEFINITION
-# ---------------------------
 class QNetwork(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size=64):
         super(QNetwork, self).__init__()
@@ -24,9 +21,6 @@ class QNetwork(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-# ---------------------------
-# 3) DQN AGENT
-# ---------------------------
 class DQNAgent:
     def __init__(self,
                  state_dim=5,
@@ -34,9 +28,9 @@ class DQNAgent:
                  hidden_size=64,
                  gamma=0.99,
                  lr=1e-3,
-                 batch_size=64,
+                 batch_size=4,
                  buffer_size=10000,
-                 min_replay_size=1000,
+                 min_replay_size=10,
                  eps_start=1.0,
                  eps_end=0.05,
                  eps_decay=5000,
@@ -122,28 +116,19 @@ class DQNAgent:
         if self.steps_done % self.target_update_freq == 0:
             self.target_net.load_state_dict(self.q_net.state_dict())
 
-# ---------------------------
-# 4) MAIN TRAINING LOOP
-# ---------------------------
+
 def main():
     
     agent = DQNAgent(state_dim=6, action_dim=3)
 
-    num_episodes = 1
-    max_steps_per_episode = 100  # or some large number
+    num_episodes = 20000
+    max_steps_per_episode = 500  # or some large number
 
     rewards_history = []
 
     for ep in range(num_episodes):
         episode_reward = 0.0
         env = SalmonFarmEnv()
-        print('PRICE', env.PRICE)
-        print('LICE', env.LICE)
-        print('GROWTH', env.GROWTH)
-        print('NUMBER', env.NUMBER)
-        print('MOVED', env.MOVED)
-        print('TREATING', env.TREATING)
-        
         state = np.array([env.PRICE, env.LICE, env.GROWTH, env.NUMBER, env.MOVED, env.TREATING])
         
         for step in range(max_steps_per_episode):    
@@ -158,6 +143,7 @@ def main():
 
             state = next_state
             if done:
+                print(step)
                 break
 
         rewards_history.append(episode_reward)

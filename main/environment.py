@@ -24,12 +24,13 @@ class SalmonFarmEnv:
                  cost_treatment=0.5,
                  cost_move=0.5,
                  cost_feed=1e-10,
+                 cost_harvest=1e5,
                  discount=0.99, 
                  time_step_size=0.01):
         
-        N_ZERO=150000
+        N_ZERO=1500
         G_ZERO=0.5       
-        L_ZERO=15000
+        L_ZERO=150
         # State variables
         self.NUMBER_ZERO = N_ZERO
         self.NUMBER = N_ZERO
@@ -57,6 +58,7 @@ class SalmonFarmEnv:
         self.cost_treatment = cost_treatment
         self.cost_move = cost_move
         self.cost_feed = cost_feed
+        self.cost_harvest = cost_harvest
         self.discount = discount
         self.action_space = 3  # Do nothing, Move, Harvest
 
@@ -100,6 +102,7 @@ class SalmonFarmEnv:
         if action == 2:
             harvest_revenue = self.GROWTH * self.NUMBER * self.PRICE
             reward += harvest_revenue
+            reward -= self.cost_harvest
             self.DONE = True
             return reward, self.DONE
 
@@ -123,8 +126,7 @@ class SalmonFarmEnv:
         # Weight
         self.GROWTH += (self.kappa_GI*(1-(self.GROWTH/self.G_max))*(1-self.TREATING) - self.kappa_GD*self.TREATING)*self.GROWTH*self.time_step_size
 
-        
-
+      
         #
         # Apply costs
         #
@@ -148,6 +150,9 @@ class SalmonFarmEnv:
             self.DONE = True
 
         return reward, self.DONE
+    
+
+
 
 def schwartz_two_factor_generator(P0, delta0, r, lambda_, kappa, alpha, sigma1, sigma2, rho, dt):
     """
