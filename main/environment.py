@@ -156,22 +156,16 @@ class SalmonFarmEnv:
 
 def schwartz_two_factor_generator(P0, delta0, r, lambda_, kappa, alpha, sigma1, sigma2, rho, dt):
     """
-    Generator function implementing the Schwartz (1997) two-factor model.
-
-    Parameters:
-    - P0      : Initial spot price.
-    - delta0  : Initial convenience yield.
-    - r       : Risk-free rate.
-    - lambda_ : Expected return on the spot price.
-    - kappa   : Mean reversion speed of the convenience yield.
-    - alpha   : Long-term mean of the convenience yield.
-    - sigma1  : Volatility of the spot price.
-    - sigma2  : Volatility of the convenience yield.
-    - rho     : Correlation between spot price and convenience yield.
-    - dt      : Time step size.
-
-    Yields:
-    - The next spot price in the stochastic process.
+    P0      : Initial spot price.
+    delta0  : Initial convenience yield.
+    r       : Risk-free rate.
+    lambda_ : Expected return on the spot price.
+    kappa   : Mean reversion speed of the convenience yield.
+    alpha   : Long-term mean of the convenience yield.
+    sigma1  : Volatility of the spot price.
+    sigma2  : Volatility of the convenience yield.
+    rho     : Correlation between spot price and convenience yield.
+    dt      : Time step size.
     """
 
     # Initial values

@@ -94,25 +94,19 @@ class DQNAgent:
         next_states_t = torch.FloatTensor(next_states)
         dones_t = torch.FloatTensor(dones).unsqueeze(1)
 
-        # Current Q estimates
         q_values = self.q_net(states_t).gather(1, actions_t)
 
-        # Next Q values (from target net)
         with torch.no_grad():
             max_next_q = self.target_net(next_states_t).max(dim=1, keepdim=True)[0]
 
-        # Target for Q
         target_q = rewards_t + self.gamma * max_next_q * (1 - dones_t)
 
-        # Loss
         loss = nn.MSELoss()(q_values, target_q)
 
-        # Backprop
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        # Periodically update target network
         if self.steps_done % self.target_update_freq == 0:
             self.target_net.load_state_dict(self.q_net.state_dict())
 
@@ -151,8 +145,7 @@ def main():
             avg_rew = np.mean(rewards_history[-50:])
             print(f"Episode {ep+1}, Average Reward (last 50): {avg_rew:.2f}")
 
-    # After training, we can see how the policy behaves (in a quick test)
-    print("Training complete. Testing final policy...")
+
     env = SalmonFarmEnv()
     state = np.array([env.PRICE, env.LICE, env.GROWTH, env.NUMBER, env.MOVED, env.TREATING])
     done = False
@@ -162,7 +155,8 @@ def main():
         reward, done = env.step(action)
         test_reward += reward
         state = np.array([env.PRICE, env.LICE, env.GROWTH, env.NUMBER, env.MOVED, env.TREATING])
-    print(f"Test episode reward: {test_reward:.2f}")
+    print("Test episode reward")
+    print(test_reward)
 
 
 if __name__ == "__main__":
