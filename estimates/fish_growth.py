@@ -4,6 +4,9 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
+from scipy.stats import shapiro
+import random
+
 
 
 def main():
@@ -15,9 +18,18 @@ def main():
   # ['ÅR', 'MÅNED_KODE', 'MÅNED', 'PO_KODE', 'PO_NAVN', 'ARTSID', 'UTSETTSÅR', 'BEHFISK_STK', 'BIOMASSE_KG', 'UTSETT_SMOLT_STK', 'UTSETT_SMOLT_STK_MINDRE_ENN_500G', 'FORFORBRUK_KG', 'UTTAK_STK', 'UTTAK_KG', 'UTTAK_SLØYD_KG', 'UTTAK_HODEKAPPET_KG', 'UTTAK_RUNDVEKT_KG', 'DØDFISK_STK', 'UTKAST_STK', 'RØMMING_STK', 'ANDRE_STK']  
 
   df_lice = pd.read_csv('./data/HubOcean/parsed-aggregated.csv')
+  print(df_lice)
 
   Y = []
   X = []
+
+  global_growthrate = []
+  global_mean_weight = []
+  global_mean_temp = []
+  global_mortalityrate = []
+  global_feedamountperfish = []
+
+  
 
   #df_main = df_main[df_main['PO_KODE'] == '03']
   
@@ -38,15 +50,25 @@ def main():
           # If we do not have lice data for the current month, skip it
           continue
         # There was no stocked fish last month, meaning we have no label
-        if prev.BEHFISK_STK == 0:
+        if prev.BEHFISK_STK == 0 or prev.BIOMASSE_KG == 0 or curr.BEHFISK_STK == 0 or curr.BIOMASSE_KG == 0:
           continue
 
-        # Predictive variable: We want to predict mortality
-        label = curr.DØDFISK_STK / prev.BEHFISK_STK
-        #path.append(prev.BEHFISK_STK + 1)
-        #path.append(np.log(label))
-        
+        # Predictive variable: We want to predict growth rate
+        label = (curr.BIOMASSE_KG / curr.BEHFISK_STK) / (prev.BIOMASSE_KG / prev.BEHFISK_STK)
 
+        global_growthrate.append(label)
+        global_mean_weight.append((prev.BIOMASSE_KG / prev.BEHFISK_STK))
+
+        temp = np.mean(lice_in_month['sjotemperatur'])
+        global_mean_temp.append(temp)
+
+        mortality = curr.DØDFISK_STK / prev.BEHFISK_STK
+        global_mortalityrate.append(mortality)
+
+        feedamountperfish = curr.FORFORBRUK_KG / curr.BEHFISK_STK
+        global_feedamountperfish.append(feedamountperfish)
+        
+        
         n_facilities = len(lice_in_month['lokalitetsnummer'].unique())
 
         # Feature 1: Total number of badebehandling treatments divided by number of facilities
@@ -67,17 +89,78 @@ def main():
         Y.append(label)
         X.append([badebehandling_in_month, forbehandling_in_month, mekanisk_in_month, feature_po_kode, feature_month])
 
+  df_ana = pd.DataFrame({
+    "growth": global_growthrate, 
+    "weight": global_mean_weight, 
+    "temp": global_mean_temp,
+    "mort": global_mortalityrate,
+    "fperfish": global_feedamountperfish,
+  })
+  print(df_ana)
 
-  X = np.array(X)
-  y = np.array(Y)
+  Q1 = np.percentile(df_ana['growth'], 25)
+  Q3 = np.percentile(df_ana['growth'], 75)
+  IQR = Q3 - Q1
+  lower_bound = Q1 - 1.5 * IQR
+  upper_bound = Q3 + 1.5 * IQR
+  df_ana = df_ana[(df_ana['growth'] >= lower_bound) & (df_ana['growth'] <= upper_bound)]
 
+  Q1 = np.percentile(df_ana['weight'], 25)
+  Q3 = np.percentile(df_ana['weight'], 75)
+  IQR = Q3 - Q1
+  lower_bound = Q1 - 1.5 * IQR
+  upper_bound = Q3 + 1.5 * IQR
+  df_ana = df_ana[(df_ana['weight'] >= lower_bound) & (df_ana['weight'] <= upper_bound)]
 
-  model = LinearRegression()
-  model.fit(X, y)
-  print(model.score(X, y))
-  print(model.coef_, model.intercept_)
+  Q1 = np.percentile(df_ana['temp'], 25)
+  Q3 = np.percentile(df_ana['temp'], 75)
+  IQR = Q3 - Q1
+  lower_bound = Q1 - 1.5 * IQR
+  upper_bound = Q3 + 1.5 * IQR
+  df_ana = df_ana[(df_ana['temp'] >= lower_bound) & (df_ana['temp'] <= upper_bound)]
+
+  Q1 = np.percentile(df_ana['mort'], 25)
+  Q3 = np.percentile(df_ana['mort'], 75)
+  IQR = Q3 - Q1
+  lower_bound = Q1 - 1.5 * IQR
+  upper_bound = Q3 + 1.5 * IQR
+  df_ana = df_ana[(df_ana['mort'] >= lower_bound) & (df_ana['mort'] <= upper_bound)]
   
 
+  Q1 = np.percentile(df_ana['fperfish'], 25)
+  Q3 = np.percentile(df_ana['fperfish'], 75)
+  IQR = Q3 - Q1
+  lower_bound = Q1 - 1.5 * IQR
+  upper_bound = Q3 + 1.5 * IQR
+  df_ana = df_ana[(df_ana['fperfish'] >= lower_bound) & (df_ana['fperfish'] <= upper_bound)]
+  print(df_ana)
+
+
+  fig = plt.figure(figsize=(12, 12))
+  ax = fig.add_subplot(projection='3d')
+  ax.scatter(df_ana['growth'], df_ana['weight'], df_ana['fperfish'])
+  ax.set_xlabel("Growth rate")
+  ax.set_ylabel("Weight")
+  ax.zaxis.set_rotate_label(False) 
+  ax.set_zlabel('Feed per fish', rotation = 0)
+  plt.show()
+
+  #plt.scatter(df_ana['growth'], df_ana['fperfish'])
+  #plt.show()
+  
+  #plt.hist(global_growthrate, bins=50, edgecolor="black")
+  #plt.xlabel("Monthly growth rate")
+  #plt.ylabel("Frequency")
+  #plt.show()
+
+  #X = np.array(X)
+  #y = np.array(Y)
+  #model = LinearRegression()
+  #model.fit(X, y)
+  #print(model.score(X, y))
+  #print(model.coef_, model.intercept_)
 
 if __name__ == '__main__':
+
+
   main()

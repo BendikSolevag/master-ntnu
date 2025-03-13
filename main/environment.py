@@ -186,5 +186,5 @@ def schwartz_two_factor_generator(P0, delta0, r, lambda_, kappa, alpha, sigma1, 
         # Update spot price (Geometric Brownian motion with convenience yield)
         P_t *= np.exp((lambda_ - delta_t - 0.5 * sigma1 ** 2) * dt + sigma1 * dZ1)
 
-        yield P_t  # Yield the next spot price
+        yield P_t 
     
