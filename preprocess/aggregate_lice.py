@@ -7,10 +7,10 @@ def main():
 
   main_df = pd.DataFrame()
   paths = []
-  for i in tqdm(range(10)):
-    df = pd.read_csv(f'./data/HubOcean/lusedata{2015 + i}.csv')
+  for i in tqdm(range(12)):
+    df = pd.read_csv(f'./data/HubOcean/lusedata{2012 + i}.csv')
     # ['referansenummer', 'uke', 'sjotemperatur', 'voksne_hunnlus', 'bevegelige_lus', 'fastsittende_lus', 'beholdning', 'dato', 'rensefisk_aktiv', 'badebehandling', 'forbehandling', 'mekanisk_fjerning', 'utsett_av_rensefisk', 'year', 'lokalitetsnummer', 'lokalitet', 'kommunenummer', 'kommune', 'geometry', 'produksjonsomradenr', 'produksjonsomrade', 'plassering_id', 'plassering', 'fylkenummer', 'fylke', 'sone_id', 'sone', 'omrade_id', 'omrade', 'region_id', 'region', 'total_voksne_hunnlus', 'total_bevegelige_lus', 'total_fastsittende_lus', 'longitude', 'latitude', 'timestamp']
-    df = df[['dato', 'uke', 'year', 'sjotemperatur', 'voksne_hunnlus', 'rensefisk_aktiv', 'badebehandling', 'forbehandling', 'mekanisk_fjerning', 'utsett_av_rensefisk', 'lokalitetsnummer',  'produksjonsomradenr', 'plassering_id']]
+    df = df[['dato', 'uke', 'year', 'sjotemperatur', 'voksne_hunnlus', 'bevegelige_lus', 'fastsittende_lus', 'rensefisk_aktiv', 'badebehandling', 'forbehandling', 'mekanisk_fjerning', 'utsett_av_rensefisk', 'lokalitetsnummer',  'produksjonsomradenr', 'plassering_id']]
     df = df.dropna()
     if i == 0:
       main_df = df
