@@ -52,6 +52,14 @@ def main():
   X = np.load('./data/featurized/mortality/X.npy')
   y = np.load('./data/featurized/mortality/y.npy')
 
+  from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+  from statsmodels.stats.diagnostic import acorr_ljungbox
+  import matplotlib.pyplot as plt
+
+  print(acorr_ljungbox(y, lags=5, boxpierce=True))
+  
+  return
+
   X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15)
 
   model = LinearRegression().fit(X_train, y_train)
@@ -73,7 +81,7 @@ def main():
   epoch_losses_train = []
   epoch_losses_test = []
 
-  for _ in tqdm(range(7)):
+  for _ in tqdm(range(4)):
     epoch_loss_train = 0
     model.train()
     for X_batch, y_batch in train_loader:

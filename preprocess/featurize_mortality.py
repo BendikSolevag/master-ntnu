@@ -5,7 +5,8 @@ from tqdm import tqdm
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
-
+from statsmodels.stats.stattools import durbin_watson
+import torch
 
 def main():
   df_bio = pd.read_csv(f'./data/Fiskeridirektoratet/lokalitet/csv/aggregated.csv', sep=";")
@@ -19,6 +20,8 @@ def main():
 
   Y = []
   X = []
+
+  LSTM_dataset = []
 
   #df_main = df_main[df_main['PO_KODE'] == '03']
   
@@ -37,11 +40,10 @@ def main():
     dfs = df_bio[df_bio['LOKNR'] == lokalitet]
     dfl = df_lice[df_lice['lokalitetsnummer'].astype(int) == int(lokalitet)]
 
-
+    
     for utsettår in dfs['ARSKLASSE'].unique():
       generation = dfs[dfs['ARSKLASSE'].astype(int) == int(utsettår)]
-
-
+      series = []
       for i in range(1, len(generation) - 1):
 
         prev = generation.iloc[i - 1]
@@ -93,11 +95,17 @@ def main():
         Y.append(label)
         X.append(explanatory)
 
+        series.append((torch.tensor(explanatory), torch.tensor(label)))
+      if len(series) > 1:
+        LSTM_dataset.append(series)
+
 
 
 
   
   Y = np.array(Y)
+
+
 
   # Handle outliers
   Q1 = np.percentile(Y, 25)
@@ -127,6 +135,7 @@ def main():
 
   np.save('./data/featurized/mortality/X.npy', X)
   np.save('./data/featurized/mortality/y.npy', y)
+  torch.save(LSTM_dataset, './data/featurized/mortality/lstm/lstm.pt')
 
 
   
