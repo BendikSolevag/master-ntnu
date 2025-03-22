@@ -57,16 +57,27 @@ def main():
 
   data = torch.load('./data/featurized/mortality/lstm/lstm.pt')
 
-  print(len(data))
-  print(data[:1])
   p_values = []
   for series in data:
     ys = [y[1].item() for y in series]
-    result = acorr_ljungbox(ys, lags=[1], return_df=True)  # test lag 1 autocorrelation
-    print(result)
+    result = acorr_ljungbox(ys, lags=[2], return_df=True)  # test lag 1 autocorrelation
+    p_values.append(result["lb_pvalue"].iloc[0])
+  
+  p_values = [p_value for p_value in p_values if str(p_value) != 'nan']
 
+  
+  plt.hist(p_values, bins=100)
+  plt.show()
 
-  return
+  from scipy.stats import combine_pvalues
+  
+
+  stat, p_combined = combine_pvalues(p_values, method='fisher')
+  print(stat, p_combined)
+
+  
+
+  
 
   data_train, data_test = train_test_split(data, test_size=0.15)
 
