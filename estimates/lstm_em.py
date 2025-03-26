@@ -60,14 +60,18 @@ def main():
   p_values = []
   for series in data:
     ys = [y[1].item() for y in series]
-    result = acorr_ljungbox(ys, lags=[2], return_df=True)  # test lag 1 autocorrelation
+    result = acorr_ljungbox(ys, lags=[1], return_df=True)  # test lag 1 autocorrelation
+    
     p_values.append(result["lb_pvalue"].iloc[0])
   
   p_values = [p_value for p_value in p_values if str(p_value) != 'nan']
 
   
   plt.hist(p_values, bins=100)
-  plt.show()
+  plt.ylabel("Frequency")
+  plt.xlabel("Ljung-Box p-value (1 lag)")
+  plt.savefig('./illustrations/mortality/mortality_autocorrelations.png', format="png", dpi=600)
+  plt.close()
 
   from scipy.stats import combine_pvalues
   

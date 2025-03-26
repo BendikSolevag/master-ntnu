@@ -1,13 +1,47 @@
 
 import pandas as pd
 import numpy as np
+import re
+
+def parse_number(s):
+    s = str(s)
+    
+    # Remove all non-digit, non-decimal, non-negative-sign characters
+    s = re.sub(r'[^\d.,-]', '', s)
+    
+    # Handle different decimal/thousands separators
+    if s.count(',') > 1 and '.' not in s:
+        s = s.replace(',', '')
+    elif s.count('.') > 1 and ',' not in s:
+        s = s.replace('.', '')
+    elif ',' in s and '.' in s:
+        if s.rfind(',') > s.rfind('.'):
+            s = s.replace('.', '').replace(',', '.')
+        else:
+            s = s.replace(',', '')
+    else:
+        s = s.replace(' ', '').replace(',', '')  # fallback
+    try:
+        return float(s)
+    except ValueError:
+        return None  # or np.nan
+
+
+
+
 
 old = pd.read_csv('./data/Fiskeridirektoratet/lokalitet/csv/2012-2016-Tabell 1.csv', sep=";")
+old['BIOMASSE_KG'] = old['BIOMASSE_KG'].apply(parse_number)
+
 med = pd.read_csv('./data/Fiskeridirektoratet/lokalitet/csv/2017-2021-Tabell 1.csv', sep=";")
+med['BIOMASSE_KG'] = med['BIOMASSE_KG'].apply(parse_number)
+
 new = pd.read_csv('./data/Fiskeridirektoratet/lokalitet/csv/2022-2023-Tabell 1.csv', sep=";")
+new['BIOMASSE_KG'] = new['BIOMASSE_KG'].apply(parse_number)
 
-
-
+print(old.dtypes)
+print(med.dtypes)
+print(new.dtypes)
 
 
 # Aggregate different year dataframes

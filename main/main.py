@@ -116,7 +116,7 @@ def main():
     agent = DQNAgent(state_dim=6, action_dim=3)
 
     num_episodes = 20000
-    max_steps_per_episode = 500  # or some large number
+    max_steps_per_episode = 200
 
     rewards_history = []
 

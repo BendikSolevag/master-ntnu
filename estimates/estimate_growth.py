@@ -13,7 +13,7 @@ from torcheval.metrics.functional import r2_score
 
 
 
-class MortalityDataset(Dataset):
+class GrowthDataset(Dataset):
   def __init__(self, X, y):
     self.X = torch.tensor(X, dtype=torch.float32)
     self.y = torch.tensor(y, dtype=torch.float32)
@@ -25,9 +25,9 @@ class MortalityDataset(Dataset):
     return self.X[idx], self.y[idx]
 
 
-class MortalityNN(nn.Module):
+class GrowthNN(nn.Module):
     def __init__(self, input_size):
-        super(MortalityNN, self).__init__()
+        super(GrowthNN, self).__init__()
         self.model = nn.Sequential(
             nn.Linear(input_size, 64),
             nn.ReLU(),
@@ -49,19 +49,12 @@ class MortalityNN(nn.Module):
     
 
 def main():
-  X = np.load('./data/featurized/mortality/X.npy')
-
-  print(len(X))
+  X = np.load('./data/featurized/growth/X.npy')
+  print(X[0])
   return
-  y = np.load('./data/featurized/mortality/y.npy')
+  y = np.load('./data/featurized/growth/y.npy')
 
-  from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
-  from statsmodels.stats.diagnostic import acorr_ljungbox
-  import matplotlib.pyplot as plt
-
-  print(acorr_ljungbox(y, lags=5, boxpierce=True))
   
-  return
 
   X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15)
 
@@ -69,8 +62,8 @@ def main():
   preds = model.predict(X_test)
   print(r2s(preds, y_test))
 
-  train_dataset = MortalityDataset(X_train, y_train)
-  test_dataset = MortalityDataset(X_test, y_test)
+  train_dataset = GrowthDataset(X_train, y_train)
+  test_dataset = GrowthDataset(X_test, y_test)
   X_test = torch.tensor(X_test, dtype=torch.float32)
   y_test = torch.tensor(y_test, dtype=torch.float32)
 
@@ -78,13 +71,13 @@ def main():
   train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
   test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-  model = MortalityNN(input_size=X.shape[1])
+  model = GrowthNN(input_size=X.shape[1])
   optimizer = optim.Adam(model.parameters(), lr=0.001)
   lossfunc = nn.MSELoss()
   epoch_losses_train = []
   epoch_losses_test = []
 
-  for _ in tqdm(range(4)):
+  for _ in tqdm(range(25)):
     epoch_loss_train = 0
     model.train()
     for X_batch, y_batch in train_loader:

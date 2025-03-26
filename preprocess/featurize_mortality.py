@@ -11,6 +11,7 @@ import torch
 def main():
   df_bio = pd.read_csv(f'./data/Fiskeridirektoratet/lokalitet/csv/aggregated.csv', sep=";")
   df_bio = df_bio[df_bio['FISKEARTID'] == 71101]
+  print(len(df_bio['LOKNR'].unique()))
     
   # ['ÅR', 'MÅNED_KODE', 'MÅNED', 'PO_KODE', 'PO_NAVN', 'ARTSID', 'UTSETTSÅR', 'BEHFISK_STK', 'BIOMASSE_KG', 'UTSETT_SMOLT_STK', 'UTSETT_SMOLT_STK_MINDRE_ENN_500G', 'FORFORBRUK_KG', 'UTTAK_STK', 'UTTAK_KG', 'UTTAK_SLØYD_KG', 'UTTAK_HODEKAPPET_KG', 'UTTAK_RUNDVEKT_KG', 'DØDFISK_STK', 'UTKAST_STK', 'RØMMING_STK', 'ANDRE_STK']  
 
