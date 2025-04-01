@@ -5,7 +5,7 @@ from torch import optim
 from sklearn.metrics import r2_score as r2s
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor
 from sklearn.linear_model import Ridge, Lasso, LinearRegression
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
@@ -51,8 +51,7 @@ class MortalityNN(nn.Module):
 def main():
   X = np.load('./data/featurized/mortality/X.npy')
 
-  print(len(X))
-  return
+  
   y = np.load('./data/featurized/mortality/y.npy')
 
   from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
@@ -61,13 +60,23 @@ def main():
 
   print(acorr_ljungbox(y, lags=5, boxpierce=True))
   
-  return
+  
 
   X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15)
 
   model = LinearRegression().fit(X_train, y_train)
   preds = model.predict(X_test)
   print(r2s(preds, y_test))
+
+  model = AdaBoostRegressor().fit(X_train, y_train)
+  preds = model.predict(X_test)
+  print(r2s(preds, y_test))
+
+  model = RandomForestRegressor().fit(X_train, y_train)
+  preds = model.predict(X_test)
+  print(r2s(preds, y_test))
+
+  return
 
   train_dataset = MortalityDataset(X_train, y_train)
   test_dataset = MortalityDataset(X_test, y_test)

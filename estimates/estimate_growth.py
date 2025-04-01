@@ -5,11 +5,12 @@ from torch import optim
 from sklearn.metrics import r2_score as r2s
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor
 from sklearn.linear_model import Ridge, Lasso, LinearRegression
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from torcheval.metrics.functional import r2_score
+import time
 
 
 
@@ -50,8 +51,7 @@ class GrowthNN(nn.Module):
 
 def main():
   X = np.load('./data/featurized/growth/X.npy')
-  print(X[0])
-  return
+  
   y = np.load('./data/featurized/growth/y.npy')
 
   
@@ -61,6 +61,18 @@ def main():
   model = LinearRegression().fit(X_train, y_train)
   preds = model.predict(X_test)
   print(r2s(preds, y_test))
+
+  model = AdaBoostRegressor().fit(X_train, y_train)
+  preds = model.predict(X_test)
+  print(r2s(preds, y_test))
+
+
+  model = RandomForestRegressor().fit(X_train, y_train)
+  preds = model.predict(X_test)
+  print(r2s(preds, y_test))
+
+
+  return
 
   train_dataset = GrowthDataset(X_train, y_train)
   test_dataset = GrowthDataset(X_test, y_test)
@@ -105,6 +117,7 @@ def main():
   r2 = r2_score(test_pred, y_test)
   print(r2)
   
+  torch.save(model.state_dict(), f'./models/growth/{time.time()}-model.pt')
 
   plt.plot(epoch_losses_train, label="train")
   plt.plot(epoch_losses_test, label="test")

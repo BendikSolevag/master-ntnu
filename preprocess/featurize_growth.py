@@ -45,9 +45,12 @@ def main():
         prev = generation.iloc[i]
         curr = generation.iloc[i+1]
         licerows = dfl[(dfl['month'].astype(int) == int(curr.MAANED)) & (dfl['year'].astype(int) == int(curr.AAR))]
+        
         if len(licerows) == 0:
           # If we do not have lice data for the current month, skip it
           continue
+
+        
         # There was no stocked fish last month, meaning we have no label
         if prev.FISKEBEHOLDNING_ANTALL == 0 or prev.BIOMASSE_KG == 0 or curr.FISKEBEHOLDNING_ANTALL == 0 or curr.BIOMASSE_KG == 0:
           continue
@@ -73,9 +76,19 @@ def main():
         mekanisk_in_month = len(licerows[licerows['mekanisk_fjerning']])
         generation_approx_age = curr.AAR - curr.ARSKLASSE
         mean_size = float(prev.BIOMASSE_KG) / int(prev.FISKEBEHOLDNING_ANTALL)
+        mean_voksne_hunnlus = np.mean(licerows['voksne_hunnlus'].values)
 
         # consider adding: temp. does not significantly improve r squared
-        explanatory = [badebehandling_in_month, forbehandling_in_month, mekanisk_in_month, generation_approx_age, feedamountperfish, mean_size]
+        explanatory = [
+          #badebehandling_in_month, 
+          #forbehandling_in_month, 
+          #mekanisk_in_month, 
+          generation_approx_age, 
+          feedamountperfish, 
+          mean_size,
+          mean_voksne_hunnlus,
+          #temp
+        ]
 
         Y.append(label)
         X.append(explanatory)
