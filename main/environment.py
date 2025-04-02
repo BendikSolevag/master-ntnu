@@ -1,5 +1,8 @@
 import numpy as np
 
+# Seasonal mean function
+def theta(t, a, b, phi):
+    return a + b * np.sin(2.0 * np.pi * (t / 52.0) + phi)
 
 class SalmonFarmEnv:
     """
@@ -65,10 +68,6 @@ class SalmonFarmEnv:
         # Growth rates
         # Salmon weight maximum
         self.G_max = 7
-        # Constant which determines lice growth
-        self.kappa_GL =  10
-        # Constnt which determines lice mortality
-        self.kappa_ML = 0.1
         # Constant which determines lice growth factor decrease per density
         self.kappa_LD = 0.2
         # Salmon Mortality Treatment
@@ -78,7 +77,11 @@ class SalmonFarmEnv:
         # Growth Decrease
         self.kappa_GD = 0.5
         
+        
+        # Lice SDE
+        self.lice_kappa, self.lice_a, self.lice_b, self.lice_phi, self.lice_sigma, self.lice_t = 0.56451781,  0.17984971,  0.05243226, -0.62917791, 0.25959416, 0
         self.LICE_TREAT_THRESHOLD = 0.5
+
 
         # Utility variables
         self.sliding_window_max = round((2/52)/self.time_step_size)
@@ -90,6 +93,7 @@ class SalmonFarmEnv:
         reward = 0.0
         # Iterate price to next value:
         self.PRICE = next(self.PRICE_GENERATOR)
+        self.lice_t += 1/52
         
         if self.DONE:
             raise ValueError("Episode already done. Reset the environment.")
@@ -112,11 +116,13 @@ class SalmonFarmEnv:
         #
 
         # Lice
-        self.LICE += (self.kappa_GL*(self.NUMBER/self.NUMBER_ZERO) - self.kappa_ML - self.kappa_LD*(self.LICE / self.NUMBER))*self.LICE*self.time_step_size
+        seasonal_mean = theta(self.lice_t, self.lice_a, self.lice_b, self.lice_phi)
+        self.LICE = (1 - self.lice_kappa) * self.LICE + self.lice_kappa * seasonal_mean + np.random.normal(0, self.lice_sigma)**2
+
 
         # Treatment
         self.sliding_window_lice.pop(0)
-        self.sliding_window_lice.append(self.LICE/self.NUMBER)
+        self.sliding_window_lice.append(self.LICE)
         window_exceeds = [True if x > self.LICE_TREAT_THRESHOLD else False for x in self.sliding_window_lice]
         self.TREATING = 1 if any(window_exceeds) else 0
 
