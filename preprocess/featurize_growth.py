@@ -103,9 +103,6 @@ def main():
   IQR = Q3 - Q1
   upper_bound = Q3 + 3 * IQR
   lower_bound = Q1 - 3 * IQR
-
-  print(upper_bound)
-  print(lower_bound)
   
   
   X_filtered = []
