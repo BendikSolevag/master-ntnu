@@ -119,6 +119,7 @@ def main():
     max_steps_per_episode = 200
 
     rewards_history = []
+    terminating_step_history = []
 
     for ep in range(num_episodes):
         episode_reward = 0.0
@@ -137,13 +138,20 @@ def main():
 
             state = next_state
             if done:
-                print(step)
                 break
 
+
         rewards_history.append(episode_reward)
+        terminating_step_history.append(step)
         if (ep+1) % 50 == 0:
-            avg_rew = np.mean(rewards_history[-50:])
-            print(f"Episode {ep+1}, Average Reward (last 50): {avg_rew:.2f}")
+            avg_rew = np.mean(rewards_history)
+            print(f"Episode {ep+1}, Average reward (last 50): {avg_rew:.2f}")
+            rewards_history = []
+            avg_len = np.mean(terminating_step_history)
+            print(f"Episode {ep+1}, Average length (last 50): {avg_len:.2f}")
+            terminating_step_history = []
+            
+        
 
 
     env = SalmonFarmEnv()

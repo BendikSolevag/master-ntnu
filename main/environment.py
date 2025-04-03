@@ -1,8 +1,33 @@
 import numpy as np
+import torch
+from torch import nn
 
 # Seasonal mean function
 def theta(t, a, b, phi):
     return a + b * np.sin(2.0 * np.pi * (t / 52.0) + phi)
+
+class GrowthNN(nn.Module):
+    def __init__(self, input_size):
+        super(GrowthNN, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(input_size, 64),
+            nn.ReLU(),
+            nn.Linear(64, 128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1),
+        )
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)
+    
 
 class SalmonFarmEnv:
     """
@@ -23,25 +48,21 @@ class SalmonFarmEnv:
                  max_fish=1000,
                  fish_price=5.0,
                  cost_closed=1.0,
-                 cost_open=0.3,
-                 cost_treatment=0.5,
+                 cost_open=0.5,
+                 cost_treatment=1e5,
                  cost_move=0.5,
                  cost_feed=1e-10,
                  cost_harvest=1e5,
                  discount=0.99, 
-                 time_step_size=0.01):
+                 time_step_size=1/52):
         
         N_ZERO=1500
         G_ZERO=0.5       
         L_ZERO=150
+
         # State variables
-        self.NUMBER_ZERO = N_ZERO
         self.NUMBER = N_ZERO
-
-        self.GROWTH_ZERO = G_ZERO
         self.GROWTH = G_ZERO
-
-        self.LICE_ZERO = L_ZERO
         self.LICE = L_ZERO
 
         self.PRICE_GENERATOR = schwartz_two_factor_generator(100, 0.01, 0.045, 0.01, 0.1, 0.05, 0.2, 0.2, 0.8, time_step_size)
@@ -68,8 +89,6 @@ class SalmonFarmEnv:
         # Growth rates
         # Salmon weight maximum
         self.G_max = 7
-        # Constant which determines lice growth factor decrease per density
-        self.kappa_LD = 0.2
         # Salmon Mortality Treatment
         self.kappa_SMT = 1
         # Growth Increase
@@ -82,10 +101,14 @@ class SalmonFarmEnv:
         self.lice_kappa, self.lice_a, self.lice_b, self.lice_phi, self.lice_sigma, self.lice_t = 0.56451781,  0.17984971,  0.05243226, -0.62917791, 0.25959416, 0
         self.LICE_TREAT_THRESHOLD = 0.5
 
-
         # Utility variables
         self.sliding_window_max = round((2/52)/self.time_step_size)
         self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
+
+        # Growth rate NN
+        self.growth_model = GrowthNN(input_size=7)
+        self.growth_model.load_state_dict(torch.load('./models/growth/model.pt', weights_only=True))
+        self.growth_model.eval()
 
 
     def step(self, action: int) -> tuple[tuple[float, float, float, float, int, float], float, bool]:
@@ -124,14 +147,26 @@ class SalmonFarmEnv:
         self.sliding_window_lice.pop(0)
         self.sliding_window_lice.append(self.LICE)
         window_exceeds = [True if x > self.LICE_TREAT_THRESHOLD else False for x in self.sliding_window_lice]
-        self.TREATING = 1 if any(window_exceeds) else 0
+        self.TREATING = 1.0 if any(window_exceeds) else 0.0
 
         # Population
         self.NUMBER += -(self.kappa_SMT*self.TREATING)*self.NUMBER*self.time_step_size
 
         # Weight
-        self.GROWTH += (self.kappa_GI*(1-(self.GROWTH/self.G_max))*(1-self.TREATING) - self.kappa_GD*self.TREATING)*self.GROWTH*self.time_step_size
-
+        explanatory = torch.tensor(
+            [
+            self.TREATING, #badebehandling_in_month, 
+            self.TREATING, #forbehandling_in_month, 
+            self.TREATING, #mekanisk_in_month, 
+            round(self.lice_t), #generation_approx_age, 
+            self.GROWTH * 0.015 * (1-self.TREATING), #feedamountperfish, 
+            self.GROWTH, #mean_size,
+            self.LICE, #mean_voksne_hunnlus,
+            ], dtype=torch.float32
+        )
+        growthrate = self.growth_model.forward(explanatory).item()
+        self.GROWTH *= growthrate * (12/52) # (model predicts monthly rates, adjust to weeekly)
+        
       
         #
         # Apply costs
@@ -142,7 +177,7 @@ class SalmonFarmEnv:
         cost_treatment = self.cost_treatment if self.TREATING else 0
         reward -= cost_treatment
 
-        cost_feed = 0.02 * self.GROWTH * self.NUMBER * self.cost_feed
+        cost_feed = 0.015 * self.GROWTH * self.NUMBER * self.cost_feed
         reward -= cost_feed
 
         # Reset window of treatment occurs in current timestep (threshold reahed 2 weeks ago)
