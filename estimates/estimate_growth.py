@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from torcheval.metrics.functional import r2_score
 import time
+import statsmodels.api as sm
 
 
 
@@ -61,19 +62,21 @@ def main():
   model = LinearRegression().fit(X_train, y_train)
   preds = model.predict(X_test)
   print(r2s(preds, y_test))
+  print(model.coef_)
 
+  est = sm.OLS(y, X)
+  est2 = est.fit()
+  print(est2.summary())
+
+  return
   model = AdaBoostRegressor().fit(X_train, y_train)
   preds = model.predict(X_test)
   print(r2s(preds, y_test))
-
-
   model = RandomForestRegressor().fit(X_train, y_train)
   preds = model.predict(X_test)
   print(r2s(preds, y_test))
 
-
-  return
-
+  
   train_dataset = GrowthDataset(X_train, y_train)
   test_dataset = GrowthDataset(X_test, y_test)
   X_test = torch.tensor(X_test, dtype=torch.float32)
@@ -89,7 +92,7 @@ def main():
   epoch_losses_train = []
   epoch_losses_test = []
 
-  for _ in tqdm(range(25)):
+  for _ in tqdm(range(20)):
     epoch_loss_train = 0
     model.train()
     for X_batch, y_batch in train_loader:

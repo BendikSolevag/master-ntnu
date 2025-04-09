@@ -25,7 +25,6 @@ def main():
   global_mean_temp = []
   global_mortalityrate = []
   global_feedamountperfish = []
-
   bio_locnums = df_bio['LOKNR'].unique()
   lice_locnums = df_lice['lokalitetsnummer'].unique()
   
@@ -56,7 +55,7 @@ def main():
           continue
 
         
-        label = (float(curr.BIOMASSE_KG) / int(curr.FISKEBEHOLDNING_ANTALL)) / (float(prev.BIOMASSE_KG) / int(prev.FISKEBEHOLDNING_ANTALL))
+        label = (float(curr.BIOMASSE_KG) / int(curr.FISKEBEHOLDNING_ANTALL))
 
         global_growthrate.append(label)
         global_mean_weight.append(float(prev.BIOMASSE_KG) / int(prev.FISKEBEHOLDNING_ANTALL))
@@ -71,23 +70,16 @@ def main():
         global_feedamountperfish.append(feedamountperfish)
         
 
-        badebehandling_in_month = len(licerows[licerows['badebehandling']])
-        forbehandling_in_month = len(licerows[licerows['forbehandling']])
-        mekanisk_in_month = len(licerows[licerows['mekanisk_fjerning']])
         generation_approx_age = curr.AAR - curr.ARSKLASSE
         mean_size = float(prev.BIOMASSE_KG) / int(prev.FISKEBEHOLDNING_ANTALL)
         mean_voksne_hunnlus = np.mean(licerows['voksne_hunnlus'].values)
 
         # consider adding: temp. does not significantly improve r squared
         explanatory = [
-          #badebehandling_in_month, 
-          #forbehandling_in_month, 
-          #mekanisk_in_month, 
           generation_approx_age, 
           feedamountperfish, 
           mean_size,
-          mean_voksne_hunnlus,
-          #temp
+          temp
         ]
 
         Y.append(label)

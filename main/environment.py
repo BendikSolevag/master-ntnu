@@ -106,9 +106,10 @@ class SalmonFarmEnv:
         self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
 
         # Growth rate NN
-        self.growth_model = GrowthNN(input_size=7)
-        self.growth_model.load_state_dict(torch.load('./models/growth/model.pt', weights_only=True))
+        self.growth_model = GrowthNN(input_size=4)
+        self.growth_model.load_state_dict(torch.load('./models/growth/1743671011.288821-model.pt', weights_only=True))
         self.growth_model.eval()
+
 
 
     def step(self, action: int) -> tuple[tuple[float, float, float, float, int, float], float, bool]:
@@ -164,10 +165,25 @@ class SalmonFarmEnv:
             self.LICE, #mean_voksne_hunnlus,
             ], dtype=torch.float32
         )
-        growthrate = self.growth_model.forward(explanatory).item()
-        self.GROWTH *= growthrate * (12/52) # (model predicts monthly rates, adjust to weeekly)
+
+
+
+
+        explanatory = [
+                round(i / 52), #generation_approx_age, 
+                self.GROWTH * 0.015 * 30, #feedamountperfish, 
+                self.GROWTH, #mean_size,
+                0, #mean_voksne_hunnlus,
+            ]
+        pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
+        # Adjust monthly to weekly
+        g_rate = np.log(pred / self.GROWTH) / 4.345
+
         
-      
+        self.GROWTH *= np.exp(g_rate)
+        
+         
+
         #
         # Apply costs
         #

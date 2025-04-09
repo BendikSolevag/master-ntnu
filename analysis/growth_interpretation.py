@@ -27,25 +27,28 @@ class GrowthNN(nn.Module):
     
 
 
-model = GrowthNN(input_size=7)
-model.load_state_dict(torch.load('./models/growth/model.pt', weights_only=True))
+TARGET_GROWTH = 8.0
+DECAY = 0.05  # You can tune this parameter
+
+model = GrowthNN(input_size=4)
+model.load_state_dict(torch.load('./models/growth/1743671011.288821-model.pt', weights_only=True))
 model.eval()
 
 curve = []
-weight = 0.2
+weight = 0.15
 for i in range(200):
   explanatory = [
-    1, #badebehandling_in_month, 
-    1, #forbehandling_in_month, 
-    1, #mekanisk_in_month, 
     round(i / 52), #generation_approx_age, 
     weight * 0.015 * 30, #feedamountperfish, 
     weight, #mean_size,
     0, #mean_voksne_hunnlus,
   ]
+
   pred = model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
   curve.append(weight)
-  weight *= (pred**(1/4.33))
+  g_rate = np.log(pred / weight) / 4.345
+  
+  weight *= np.exp(g_rate)
 
 
 plt.plot(curve)
