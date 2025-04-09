@@ -180,9 +180,9 @@ class SalmonFarmEnv:
         g_rate = np.log(pred / self.GROWTH) / 4.345
 
         
-        self.GROWTH *= np.exp(g_rate)
+        self.GROWTH *= np.exp(g_rate * np.sqrt(1 - (self.GROWTH / 8)))
+
         
-         
 
         #
         # Apply costs

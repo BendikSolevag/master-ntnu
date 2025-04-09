@@ -48,7 +48,7 @@ for i in range(200):
   curve.append(weight)
   g_rate = np.log(pred / weight) / 4.345
   
-  weight *= np.exp(g_rate)
+  weight *= (np.exp(g_rate * np.sqrt(1 - (weight / 8)) ))
 
 
 plt.plot(curve)
