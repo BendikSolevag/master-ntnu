@@ -51,7 +51,7 @@ class SalmonFarmEnv:
                  cost_open=0.5,
                  cost_treatment=1e5,
                  cost_move=0.5,
-                 cost_feed=1e-10,
+                 cost_feed=0.14,
                  cost_harvest=1e5,
                  discount=0.99, 
                  time_step_size=1/52):
@@ -85,17 +85,8 @@ class SalmonFarmEnv:
         self.cost_harvest = cost_harvest
         self.discount = discount
         self.action_space = 3  # Do nothing, Move, Harvest
-
-        # Growth rates
-        # Salmon weight maximum
-        self.G_max = 7
-        # Salmon Mortality Treatment
-        self.kappa_SMT = 1
-        # Growth Increase
-        self.kappa_GI = 0.1
-        # Growth Decrease
-        self.kappa_GD = 0.5
         
+        self.feed_per_fish = 0.015
         
         # Lice SDE
         self.lice_kappa, self.lice_a, self.lice_b, self.lice_phi, self.lice_sigma, self.lice_t = 0.56451781,  0.17984971,  0.05243226, -0.62917791, 0.25959416, 0
@@ -178,10 +169,10 @@ class SalmonFarmEnv:
         # Weight
         explanatory = [
             round(self.lice_t / 52), #generation_approx_age, 
-            self.GROWTH * 0.015 * 30, #feedamountperfish, 
+            self.GROWTH * self.feed_per_fish * 30, #feedamountperfish, 
             self.GROWTH, #mean_size,
             0, #mean_voksne_hunnlus,
-        ]
+        ] 
         pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
         # Adjust monthly to weekly
         g_rate = np.log(pred / self.GROWTH) / 4.345
@@ -197,7 +188,7 @@ class SalmonFarmEnv:
         cost_treatment = self.cost_treatment if self.TREATING else 0
         reward -= cost_treatment
 
-        cost_feed = 0.015 * self.GROWTH * self.NUMBER * self.cost_feed
+        cost_feed = self.feed_per_fish * self.GROWTH * self.NUMBER * self.cost_feed
         reward -= cost_feed
 
         # Reset window of treatment occurs in current timestep (threshold reahed 2 weeks ago)

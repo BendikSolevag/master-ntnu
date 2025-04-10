@@ -36,10 +36,12 @@ model.eval()
 
 curve = []
 weight = 0.15
+total_feedcost = 0
 for i in range(200):
+  feed_amount_per_fish = weight * 0.015 * 30
   explanatory = [
     round(i / 52), #generation_approx_age, 
-    weight * 0.015 * 30, #feedamountperfish, 
+    feed_amount_per_fish, #feedamountperfish, 
     weight, #mean_size,
     0, #mean_voksne_hunnlus,
   ]
@@ -50,6 +52,13 @@ for i in range(200):
   
   weight *= (np.exp(g_rate * np.sqrt(1 - (weight / 8)) ))
 
+  # This is how weekly feed cost was calculated
+  total_feedcost += 0.14 * feed_amount_per_fish
+  
+  if weight >= 5:
+      break
 
+total_feedcost = total_feedcost / (weight * 0.84)
+plt.title(total_feedcost)
 plt.plot(curve)
 plt.show()
