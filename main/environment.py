@@ -27,7 +27,7 @@ class GrowthNN(nn.Module):
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
-    
+
 
 class SalmonFarmEnv:
     """
@@ -110,7 +110,27 @@ class SalmonFarmEnv:
         self.growth_model.load_state_dict(torch.load('./models/growth/1743671011.288821-model.pt', weights_only=True))
         self.growth_model.eval()
 
-
+    def resolve_mortalityrate(self):
+        categorydraw = np.random.uniform()
+        if categorydraw >= 0.999**2:
+            # gt 50% mortality
+            return np.random.uniform(0.5, 0.9)
+        if categorydraw >= 0.995**2:
+            # gt 25% mortality
+            return np.random.uniform(0.25, 0.5)
+        if categorydraw >= 0.989**2:
+            # gt 10% mortality
+            return np.random.uniform(0.1, 0.25)
+        if categorydraw >= 0.975*0.968:
+            # gt 5% mortality
+            return np.random.uniform(0.05, 0.1)
+        if categorydraw >= 0.948*0.937:
+            # gt 2.5% mortality
+            return np.random.uniform(0.025, 0.05)
+        if categorydraw >= 0.894*0.853:
+            # gt 1% mortality
+            return np.random.uniform(0.01, 0.025)
+        return 0
 
     def step(self, action: int) -> tuple[tuple[float, float, float, float, int, float], float, bool]:
         # Set reward equal zero
@@ -151,37 +171,21 @@ class SalmonFarmEnv:
         self.TREATING = 1.0 if any(window_exceeds) else 0.0
 
         # Population
-        self.NUMBER += -(self.kappa_SMT*self.TREATING)*self.NUMBER*self.time_step_size
+        if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
+            mr = self.resolve_mortalityrate()
+            self.NUMBER = self.NUMBER - mr * self.NUMBER
 
         # Weight
-        explanatory = torch.tensor(
-            [
-            self.TREATING, #badebehandling_in_month, 
-            self.TREATING, #forbehandling_in_month, 
-            self.TREATING, #mekanisk_in_month, 
-            round(self.lice_t), #generation_approx_age, 
-            self.GROWTH * 0.015 * (1-self.TREATING), #feedamountperfish, 
-            self.GROWTH, #mean_size,
-            self.LICE, #mean_voksne_hunnlus,
-            ], dtype=torch.float32
-        )
-
-
-
-
         explanatory = [
-                round(i / 52), #generation_approx_age, 
-                self.GROWTH * 0.015 * 30, #feedamountperfish, 
-                self.GROWTH, #mean_size,
-                0, #mean_voksne_hunnlus,
-            ]
+            round(self.lice_t / 52), #generation_approx_age, 
+            self.GROWTH * 0.015 * 30, #feedamountperfish, 
+            self.GROWTH, #mean_size,
+            0, #mean_voksne_hunnlus,
+        ]
         pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
         # Adjust monthly to weekly
         g_rate = np.log(pred / self.GROWTH) / 4.345
-
-        
         self.GROWTH *= np.exp(g_rate * np.sqrt(1 - (self.GROWTH / 8)))
-
         
 
         #
@@ -208,7 +212,6 @@ class SalmonFarmEnv:
 
         return reward, self.DONE
     
-
 
 
 def schwartz_two_factor_generator(P0, delta0, r, lambda_, kappa, alpha, sigma1, sigma2, rho, dt):
