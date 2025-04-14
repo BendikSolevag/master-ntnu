@@ -53,7 +53,7 @@ class DQNAgent:
         self.target_net.load_state_dict(self.q_net.state_dict())
 
         self.optimizer = optim.Adam(self.q_net.parameters(), lr=self.lr)
-
+        
         self.replay_buffer = deque(maxlen=buffer_size)
         self.steps_done = 0
 
@@ -120,6 +120,7 @@ def main():
 
     rewards_history = []
     terminating_step_history = []
+    move_step_history = []
 
     for ep in range(num_episodes):
         episode_reward = 0.0
@@ -143,6 +144,7 @@ def main():
 
         rewards_history.append(episode_reward)
         terminating_step_history.append(step)
+        move_step_history.append(env.MOVED_TIMESTEP)
         if (ep+1) % 50 == 0:
             avg_rew = np.mean(rewards_history)
             print(f"Episode {ep+1}, Average reward (last 50): {avg_rew:.2f}")
@@ -150,6 +152,10 @@ def main():
             avg_len = np.mean(terminating_step_history)
             print(f"Episode {ep+1}, Average length (last 50): {avg_len:.2f}")
             terminating_step_history = []
+
+            avg_move = np.mean(move_step_history)
+            print(f"Episode {ep+1}, Average movestep (last 50): {avg_move:.2f}")
+            move_step_history = []
             
         
 
@@ -158,12 +164,16 @@ def main():
     state = np.array([env.PRICE, env.LICE, env.GROWTH, env.NUMBER, env.MOVED, env.TREATING])
     done = False
     test_reward = 0
+    step = 0
     while not done:
         action = agent.act(state)
         reward, done = env.step(action)
         test_reward += reward
         state = np.array([env.PRICE, env.LICE, env.GROWTH, env.NUMBER, env.MOVED, env.TREATING])
+        step += 1
     print("Test episode reward")
+    print(env.lice_t)
+    print(env.MOVED_TIMESTEP)
     print(test_reward)
 
 

@@ -52,11 +52,11 @@ class SalmonFarmEnv:
                  cost_treatment=1e5,
                  cost_move=0.5,
                  cost_feed=0.14,
-                 cost_harvest=1e5,
+                 cost_harvest=1e8,
                  discount=0.99, 
                  time_step_size=1/52):
         
-        N_ZERO=1500
+        N_ZERO=150000
         G_ZERO=0.5       
         L_ZERO=150
 
@@ -70,6 +70,7 @@ class SalmonFarmEnv:
 
         self.TREATING = 0
         self.MOVED = 0
+        self.MOVED_TIMESTEP = 0
         self.DONE = 0
 
         # Constants
@@ -136,6 +137,7 @@ class SalmonFarmEnv:
         if action == 1:
             reward += self.cost_move
             self.MOVED = 1
+            self.MOVED_TIMESTEP = self.lice_t * 52
 
         # If action is harvest => immediate reward, episode ends
         if action == 2:
@@ -176,8 +178,8 @@ class SalmonFarmEnv:
         pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
         # Adjust monthly to weekly
         g_rate = np.log(pred / self.GROWTH) / 4.345
-        self.GROWTH *= np.exp(g_rate * np.sqrt(1 - (self.GROWTH / 8)))
-        
+        greater_factor = (8 - g_rate) / np.abs(8 - g_rate) 
+        self.GROWTH *= np.exp(g_rate * greater_factor * np.sqrt(np.abs(1 - (self.GROWTH / 8))))        
 
         #
         # Apply costs
