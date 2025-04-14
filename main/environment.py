@@ -71,6 +71,8 @@ class SalmonFarmEnv:
         self.GROWTH_CLOSED = G_ZERO
         self.GROWTH_OPEN = G_ZERO
         self.LICE = L_ZERO
+        self.AGE_CLOSED = 0
+        self.AGE_OPEN = 0
 
         self.PRICE_GENERATOR = schwartz_two_factor_generator(100, 0.01, 0.045, 0.01, 0.1, 0.05, 0.2, 0.2, 0.8, time_step_size)
         self.PRICE = next(self.PRICE_GENERATOR)
@@ -137,6 +139,8 @@ class SalmonFarmEnv:
         # Iterate price to next value:
         self.PRICE = next(self.PRICE_GENERATOR)
         self.lice_t += 1/52
+        self.AGE_CLOSED += 1/52
+        self.AGE_OPEN += 1/52
         
         if self.DONE:
             raise ValueError("Episode already done. Reset the environment.")
@@ -145,15 +149,19 @@ class SalmonFarmEnv:
         if action == 1:
             # One could argue a penalty should be incurred if planting into a pen where fish already exist. Instead we rely on the repeated incurred feed/operating cost to do this.
             self.NUMBER_CLOSED = self.N_ZERO
-            reward += self.cost_plant * self.N_ZERO
+            self.GROWTH_CLOSED = self.G_ZERO
+            self.AGE_CLOSED = 0
+            reward -= self.cost_plant * self.N_ZERO
 
         # If action is move => move closed individuals to open, reset closed
         if action == 2:
             reward -= self.cost_move
             self.NUMBER_OPEN = self.NUMBER_CLOSED
             self.GROWTH_OPEN = self.GROWTH_CLOSED
+            self.AGE_OPEN = self.AGE_CLOSED
             self.NUMBER_CLOSED = 0
             self.GROWTH_CLOSED = 0
+            self.AGE_CLOSED = 0
 
         # If action is harvest => give reward, reset open
         if action == 3:
@@ -162,6 +170,7 @@ class SalmonFarmEnv:
             reward -= self.cost_harvest
             self.GROWTH_OPEN = 0
             self.NUMBER_OPEN = 0
+            self.AGE_OPEN = 0
             if not self.infinite:
                 self.DONE = 1
                 return reward, self.DONE
@@ -194,7 +203,7 @@ class SalmonFarmEnv:
         if self.NUMBER_CLOSED > 0:
             # Closed
             explanatory = [
-                round(self.lice_t / 52), #generation_approx_age, 
+                round(self.AGE_CLOSED), #generation_approx_age, 
                 self.GROWTH_CLOSED * self.feed_per_fish * 30, #feedamountperfish, 
                 self.GROWTH_CLOSED, #mean_size,
                 0, #mean_voksne_hunnlus, 0 as the system is closed
@@ -208,7 +217,7 @@ class SalmonFarmEnv:
         if self.NUMBER_OPEN > 0 and self.TREATING == 0.0:
             # Open
             explanatory = [
-                round(self.lice_t / 52), #generation_approx_age, 
+                round(self.AGE_OPEN), #generation_approx_age, 
                 self.GROWTH_OPEN * self.feed_per_fish * 30, #feedamountperfish, 
                 self.GROWTH_OPEN, #mean_size,
                 self.LICE, #mean_voksne_hunnlus,
