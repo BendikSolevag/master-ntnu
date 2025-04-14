@@ -165,7 +165,7 @@ class SalmonFarmEnv:
 
         # If action is harvest => give reward, reset open
         if action == 3:
-            harvest_revenue = self.GROWTH * self.NUMBER_OPEN * self.PRICE
+            harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE
             reward += harvest_revenue
             reward -= self.cost_harvest
             self.GROWTH_OPEN = 0
@@ -254,7 +254,8 @@ class SalmonFarmEnv:
         if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
           self.LICE = 0.1 * self.LICE + 0.9 * self.LICE * np.random.beta(2.5, 5)
           self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
-          self.sliding_window_lice[-1] = self.LICE/self.NUMBER
+          if self.NUMBER_OPEN > 0:  
+            self.sliding_window_lice[-1] = self.LICE/self.NUMBER_OPEN
 
         return reward, self.DONE
     

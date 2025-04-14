@@ -53,7 +53,7 @@ class DQNAgent:
         self.target_net.load_state_dict(self.q_net.state_dict())
 
         self.optimizer = optim.Adam(self.q_net.parameters(), lr=self.lr)
-        
+
         self.replay_buffer = deque(maxlen=buffer_size)
         self.steps_done = 0
 
@@ -113,7 +113,7 @@ class DQNAgent:
 
 def main():
     
-    agent = DQNAgent(state_dim=6, action_dim=3)
+    agent = DQNAgent(state_dim=7, action_dim=4)
 
     num_episodes = 20000
     max_steps_per_episode = 200
@@ -124,15 +124,15 @@ def main():
 
     for ep in range(num_episodes):
         episode_reward = 0.0
-        env = SalmonFarmEnv()
-        state = np.array([env.PRICE, env.LICE, env.GROWTH, env.NUMBER, env.MOVED, env.TREATING])
+        env = SalmonFarmEnv(infinite=False)
+        state = np.array([env.PRICE, env.LICE, env.GROWTH_CLOSED, env.NUMBER_CLOSED, env.GROWTH_OPEN, env.NUMBER_OPEN, env.TREATING])
         
         for step in range(max_steps_per_episode):    
             action = agent.act(state)
             
             reward, done = env.step(action)
             episode_reward += reward
-            next_state = np.array([env.PRICE, env.LICE, env.GROWTH, env.NUMBER, env.MOVED, env.TREATING])
+            next_state = np.array([env.PRICE, env.LICE, env.GROWTH_CLOSED, env.NUMBER_CLOSED, env.GROWTH_OPEN, env.NUMBER_OPEN, env.TREATING])
 
             agent.store_transition((state, action, reward, next_state, float(done)))
             agent.train_step()
@@ -144,7 +144,6 @@ def main():
 
         rewards_history.append(episode_reward)
         terminating_step_history.append(step)
-        move_step_history.append(env.MOVED_TIMESTEP)
         if (ep+1) % 50 == 0:
             avg_rew = np.mean(rewards_history)
             print(f"Episode {ep+1}, Average reward (last 50): {avg_rew:.2f}")
@@ -152,12 +151,6 @@ def main():
             avg_len = np.mean(terminating_step_history)
             print(f"Episode {ep+1}, Average length (last 50): {avg_len:.2f}")
             terminating_step_history = []
-
-            avg_move = np.mean(move_step_history)
-            print(f"Episode {ep+1}, Average movestep (last 50): {avg_move:.2f}")
-            move_step_history = []
-            
-        
 
 
     env = SalmonFarmEnv()
@@ -173,7 +166,6 @@ def main():
         step += 1
     print("Test episode reward")
     print(env.lice_t)
-    print(env.MOVED_TIMESTEP)
     print(test_reward)
 
 
