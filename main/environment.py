@@ -51,10 +51,10 @@ class SalmonFarmEnv:
                  cost_closed=1.0,
                  cost_open=0.5,
                  cost_treatment=1e5,
-                 cost_plant=1e-4,
+                 cost_plant=1e3,
                  cost_move=1e5,
-                 cost_feed=0.14,
-                 cost_harvest=1e8,
+                 cost_feed=0.14 * 1e-4,
+                 cost_harvest=1e5,
                  discount=0.99, 
                  time_step_size=1/52):
         
@@ -69,7 +69,7 @@ class SalmonFarmEnv:
         self.NUMBER_CLOSED = N_ZERO
         self.NUMBER_OPEN = 0
         self.GROWTH_CLOSED = G_ZERO
-        self.GROWTH_OPEN = G_ZERO
+        self.GROWTH_OPEN = 0
         self.LICE = L_ZERO
         self.AGE_CLOSED = 0
         self.AGE_OPEN = 0
@@ -111,6 +111,9 @@ class SalmonFarmEnv:
         self.growth_model.load_state_dict(torch.load('./models/growth/1743671011.288821-model.pt', weights_only=True))
         self.growth_model.eval()
 
+    def get_state(self):
+        return [self.PRICE, self.LICE, self.GROWTH_CLOSED, self.NUMBER_CLOSED, self.GROWTH_OPEN, self.NUMBER_OPEN, self.TREATING]
+
     def resolve_mortalityrate(self):
         categorydraw = np.random.uniform()
         if categorydraw >= 0.999**2:
@@ -147,10 +150,11 @@ class SalmonFarmEnv:
         
         # If action is plant => add new generation to closed pool
         if action == 1:
-            # One could argue a penalty should be incurred if planting into a pen where fish already exist. Instead we rely on the repeated incurred feed/operating cost to do this.
-            self.NUMBER_CLOSED = self.N_ZERO
-            self.GROWTH_CLOSED = self.G_ZERO
-            self.AGE_CLOSED = 0
+            if self.infinite:
+                # One could argue a penalty should be incurred if planting into a pen where fish already exist. Instead we rely on the repeated incurred feed/operating cost to do this.
+                self.NUMBER_CLOSED = self.N_ZERO
+                self.GROWTH_CLOSED = self.G_ZERO
+                self.AGE_CLOSED = 0
             reward -= self.cost_plant * self.N_ZERO
 
         # If action is move => move closed individuals to open, reset closed
@@ -171,8 +175,9 @@ class SalmonFarmEnv:
             self.GROWTH_OPEN = 0
             self.NUMBER_OPEN = 0
             self.AGE_OPEN = 0
+            self.DONE = 1
+            
             if not self.infinite:
-                self.DONE = 1
                 return reward, self.DONE
         
 
@@ -285,7 +290,10 @@ def schwartz_two_factor_generator(P0, delta0, r, lambda_, kappa, alpha, sigma1, 
     while True:
         # Generate correlated Brownian motion increments
         dW = np.random.randn(2) * np.sqrt(dt)
+        
         dZ1, dZ2 = L @ dW
+        dZ1, dZ2 = 0, 0
+        
 
         # Update convenience yield (Ornstein-Uhlenbeck process)
         delta_t += kappa * (alpha - delta_t) * dt + sigma2 * dZ2

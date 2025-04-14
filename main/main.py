@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.optim as optim
 from collections import deque
 from environment import SalmonFarmEnv
+import time
+import matplotlib.pyplot as plt
 
 
 class QNetwork(nn.Module):
@@ -12,6 +14,10 @@ class QNetwork(nn.Module):
         super(QNetwork, self).__init__()
         self.net = nn.Sequential(
             nn.Linear(state_dim, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
@@ -31,8 +37,8 @@ class DQNAgent:
                  batch_size=4,
                  buffer_size=10000,
                  min_replay_size=10,
-                 eps_start=1.0,
-                 eps_end=0.05,
+                 eps_start=0.9,
+                 eps_end=0.001,
                  eps_decay=5000,
                  target_update_freq=1000):
         self.state_dim = state_dim
@@ -115,59 +121,132 @@ def main():
     
     agent = DQNAgent(state_dim=7, action_dim=4)
 
-    num_episodes = 20000
+    num_episodes = 10000
     max_steps_per_episode = 200
 
     rewards_history = []
     terminating_step_history = []
-    move_step_history = []
+    top_avg_rew = -1 * float('inf')
+    top_timestamp = time.time()
 
+    
     for ep in range(num_episodes):
         episode_reward = 0.0
+        terminating_step = 0
         env = SalmonFarmEnv(infinite=False)
-        state = np.array([env.PRICE, env.LICE, env.GROWTH_CLOSED, env.NUMBER_CLOSED, env.GROWTH_OPEN, env.NUMBER_OPEN, env.TREATING])
+
+        state = np.array(env.get_state())
+
+        growth_closeds = []
+        growth_opens = []
+        action_history = []
+
         
-        for step in range(max_steps_per_episode):    
+        
+        for step in range(max_steps_per_episode):
+            terminating_step += 1
             action = agent.act(state)
             
             reward, done = env.step(action)
-            episode_reward += reward
-            next_state = np.array([env.PRICE, env.LICE, env.GROWTH_CLOSED, env.NUMBER_CLOSED, env.GROWTH_OPEN, env.NUMBER_OPEN, env.TREATING])
 
-            agent.store_transition((state, action, reward, next_state, float(done)))
+            growth_closeds.append(env.GROWTH_CLOSED)
+            growth_opens.append(env.GROWTH_OPEN)
+            action_history.append(action)
+
+            episode_reward += reward
+            next_state = np.array(env.get_state())
+
+            agent.store_transition((state, action, reward, next_state, float(env.DONE)))
             agent.train_step()
 
             state = next_state
-            if done:
+            if env.DONE == 1:
                 break
+        
+        if ep == (num_episodes-1):
+            # Create 2 subplots (1 row, 2 columns)
+            fig, axs = plt.subplots(2, 1)  # 1 row, 2 columns
 
+            # Plot on the first subplot
+            axs[0].plot(growth_closeds, label="closed")
+            axs[0].plot(growth_opens, label="open")
+            
+
+            # Plot on the second subplot
+            axs[1].plot(action_history)
+            fig.tight_layout()
+            fig.savefig('./a.png', format="png", dpi=600)
+            
 
         rewards_history.append(episode_reward)
-        terminating_step_history.append(step)
+        terminating_step_history.append(terminating_step)
         if (ep+1) % 50 == 0:
             avg_rew = np.mean(rewards_history)
+            
+            if avg_rew >= top_avg_rew:
+                top_avg_rew = avg_rew
+                top_timestamp = time.time()
+                torch.save(agent.q_net.state_dict(), f'./models/agent/{top_timestamp}-q_net.pt')
+                torch.save(agent.target_net.state_dict(), f'./models/agent/{top_timestamp}-target_net.pt')
+
             print(f"Episode {ep+1}, Average reward (last 50): {avg_rew:.2f}")
             rewards_history = []
             avg_len = np.mean(terminating_step_history)
             print(f"Episode {ep+1}, Average length (last 50): {avg_len:.2f}")
             terminating_step_history = []
 
+    return
+    agent.q_net.load_state_dict(torch.load(f'./models/agent/{top_timestamp}-q_net.pt', weights_only=True))
+    agent.target_net.load_state_dict(torch.load(f'./models/agent/{top_timestamp}-target_net.pt', weights_only=True))
+    env = SalmonFarmEnv(infinite=False)
 
-    env = SalmonFarmEnv()
-    state = np.array([env.PRICE, env.LICE, env.GROWTH, env.NUMBER, env.MOVED, env.TREATING])
-    done = False
+    state = np.array(env.get_state())
     test_reward = 0
     step = 0
-    while not done:
+    closed_pen_hist = []
+    open_pen_hist = []
+    while env.DONE != 1:
         action = agent.act(state)
         reward, done = env.step(action)
         test_reward += reward
-        state = np.array([env.PRICE, env.LICE, env.GROWTH, env.NUMBER, env.MOVED, env.TREATING])
+        state = np.array(env.get_state())
         step += 1
+        closed_pen_hist.append(env.GROWTH_CLOSED)
+        open_pen_hist.append(env.GROWTH_OPEN)
     print("Test episode reward")
     print(env.lice_t)
     print(test_reward)
 
+    plt.plot(closed_pen_hist, label="Closed pen history")
+    plt.plot(open_pen_hist, label="Open pen history")
+    plt.legend()
+    plt.savefig('growth_histories.png', format="png", dpi=800)
+    plt.close()
+
+
 
 if __name__ == "__main__":
-    main()
+    #main()
+    
+    
+
+    env = SalmonFarmEnv(infinite=False)
+    total_r = 0
+    
+    
+    for _ in range(10):
+        r, d = env.step(0)
+        total_r += r
+
+    r, d = env.step(2)
+    total_r += r
+
+    for _ in range(10):
+        r, d = env.step(0)
+        total_r += r
+
+    r, d = env.step(3)
+    total_r += r
+
+    print("{:e}".format(total_r))
+    
