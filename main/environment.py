@@ -50,27 +50,30 @@ class SalmonFarmEnv:
                  cost_closed=1.0,
                  cost_open=0.5,
                  cost_treatment=1e5,
-                 cost_move=0.5,
+                 cost_plant=1e-4,
+                 cost_move=1e5,
                  cost_feed=0.14,
                  cost_harvest=1e8,
                  discount=0.99, 
                  time_step_size=1/52):
         
         N_ZERO=150000
-        G_ZERO=0.5       
+        G_ZERO=0.2       
         L_ZERO=150
 
         # State variables
-        self.NUMBER = N_ZERO
-        self.GROWTH = G_ZERO
+        self.N_ZERO = N_ZERO
+        self.G_ZERO = G_ZERO
+        self.NUMBER_CLOSED = N_ZERO
+        self.NUMBER_OPEN = 0
+        self.GROWTH_CLOSED = G_ZERO
+        self.GROWTH_OPEN = G_ZERO
         self.LICE = L_ZERO
 
         self.PRICE_GENERATOR = schwartz_two_factor_generator(100, 0.01, 0.045, 0.01, 0.1, 0.05, 0.2, 0.2, 0.8, time_step_size)
         self.PRICE = next(self.PRICE_GENERATOR)
 
         self.TREATING = 0
-        self.MOVED = 0
-        self.MOVED_TIMESTEP = 0
         self.DONE = 0
 
         # Constants
@@ -81,11 +84,13 @@ class SalmonFarmEnv:
         self.cost_closed = cost_closed
         self.cost_open = cost_open
         self.cost_treatment = cost_treatment
+        self.cost_plant = cost_plant
         self.cost_move = cost_move
         self.cost_feed = cost_feed
         self.cost_harvest = cost_harvest
         self.discount = discount
-        self.action_space = 3  # Do nothing, Move, Harvest
+        self.action_space = 4  # Do nothing, Plant, Move, Harvest
+        self.max_biomass = N_ZERO * 6.5 # Assume max biomass is hit when one generation hits 6.5 kg
         
         self.feed_per_fish = 0.015
         
@@ -134,19 +139,29 @@ class SalmonFarmEnv:
         if self.DONE:
             raise ValueError("Episode already done. Reset the environment.")
         
+        # If action is plant => add new generation to closed pool
         if action == 1:
-            reward += self.cost_move
-            self.MOVED = 1
-            self.MOVED_TIMESTEP = self.lice_t * 52
+            # One could argue a penalty should be incurred if planting into a pen where fish already exist. Instead we rely on the repeated incurred feed/operating cost to do this.
+            self.NUMBER_CLOSED = self.N_ZERO
+            reward += self.cost_plant * self.N_ZERO
 
-        # If action is harvest => immediate reward, episode ends
+        # If action is move => move closed individuals to open, reset closed
         if action == 2:
-            harvest_revenue = self.GROWTH * self.NUMBER * self.PRICE
+            reward -= self.cost_move
+            self.NUMBER_OPEN = self.NUMBER_CLOSED
+            self.GROWTH_OPEN = self.GROWTH_CLOSED
+            self.NUMBER_CLOSED = 0
+            self.GROWTH_CLOSED = 0
+
+        # If action is harvest => give reward, reset open
+        if action == 3:
+            harvest_revenue = self.GROWTH * self.NUMBER_OPEN * self.PRICE
             reward += harvest_revenue
             reward -= self.cost_harvest
-            self.DONE = True
+            self.GROWTH_OPEN = 0
+            self.NUMBER_OPEN = 0
             return reward, self.DONE
-
+        
 
         #
         # Update state variables
@@ -163,45 +178,70 @@ class SalmonFarmEnv:
         window_exceeds = [True if x > self.LICE_TREAT_THRESHOLD else False for x in self.sliding_window_lice]
         self.TREATING = 1.0 if any(window_exceeds) else 0.0
 
-        # Population
+        # Population loss due to treatment
         if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
             mr = self.resolve_mortalityrate()
-            self.NUMBER = self.NUMBER - mr * self.NUMBER
+            self.NUMBER_OPEN = self.NUMBER_OPEN - mr * self.NUMBER_OPEN
 
-        # Weight
-        explanatory = [
-            round(self.lice_t / 52), #generation_approx_age, 
-            self.GROWTH * self.feed_per_fish * 30, #feedamountperfish, 
-            self.GROWTH, #mean_size,
-            0, #mean_voksne_hunnlus,
-        ] 
-        pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
-        # Adjust monthly to weekly
-        g_rate = np.log(pred / self.GROWTH) / 4.345
-        greater_factor = (8 - g_rate) / np.abs(8 - g_rate) 
-        self.GROWTH *= np.exp(g_rate * greater_factor * np.sqrt(np.abs(1 - (self.GROWTH / 8))))        
+        #
+        # Grow population in open/closed system
+        #
+
+        if self.NUMBER_CLOSED > 0:
+            # Closed
+            explanatory = [
+                round(self.lice_t / 52), #generation_approx_age, 
+                self.GROWTH_CLOSED * self.feed_per_fish * 30, #feedamountperfish, 
+                self.GROWTH_CLOSED, #mean_size,
+                0, #mean_voksne_hunnlus, 0 as the system is closed
+            ] 
+            pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
+            # Adjust monthly to weekly
+            g_rate = np.log(pred / self.GROWTH_CLOSED) / 4.345
+            greater_factor = (8 - g_rate) / np.abs(8 - g_rate) 
+            self.GROWTH_CLOSED *= np.exp(g_rate * greater_factor * np.sqrt(np.abs(1 - (self.GROWTH_CLOSED / 8))))
+
+        if self.NUMBER_OPEN > 0 and self.TREATING == 0.0:
+            # Open
+            explanatory = [
+                round(self.lice_t / 52), #generation_approx_age, 
+                self.GROWTH_OPEN * self.feed_per_fish * 30, #feedamountperfish, 
+                self.GROWTH_OPEN, #mean_size,
+                self.LICE, #mean_voksne_hunnlus,
+            ] 
+            pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
+            # Adjust monthly to weekly
+            g_rate = np.log(pred / self.GROWTH_OPEN) / 4.345
+            greater_factor = (8 - g_rate) / np.abs(8 - g_rate) 
+            self.GROWTH_OPEN *= np.exp(g_rate * greater_factor * np.sqrt(np.abs(1 - (self.GROWTH_OPEN / 8))))        
+
 
         #
         # Apply costs
         #
-        cost_operation = self.cost_closed if self.MOVED == 0 else self.cost_open
+        cost_operation = 0
+        if self.NUMBER_CLOSED > 0:
+            cost_operation += self.cost_closed
+        if self.NUMBER_OPEN > 0: 
+            cost_operation += self.cost_open
         reward -= cost_operation
 
         cost_treatment = self.cost_treatment if self.TREATING else 0
         reward -= cost_treatment
 
-        cost_feed = self.feed_per_fish * self.GROWTH * self.NUMBER * self.cost_feed
-        reward -= cost_feed
+        cost_feed_closed = self.feed_per_fish * self.GROWTH_CLOSED * self.NUMBER_CLOSED * self.cost_feed
+        cost_feed_open = self.feed_per_fish * self.GROWTH_OPEN * self.NUMBER_OPEN * self.cost_feed
+        reward -= (cost_feed_closed + cost_feed_open)
+
+        # If max biomass is exceeded, punish reward
+        if self.NUMBER_OPEN * self.GROWTH_OPEN + self.NUMBER_CLOSED * self.GROWTH_CLOSED >= self.max_biomass:
+            reward -= 1e8
 
         # Reset window of treatment occurs in current timestep (threshold reahed 2 weeks ago)
         if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
           self.LICE = 0.1 * self.LICE + 0.9 * self.LICE * np.random.beta(2.5, 5)
           self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
           self.sliding_window_lice[-1] = self.LICE/self.NUMBER
-
-        # If population reaches 0, force episode to end
-        if self.NUMBER < 1:
-            self.DONE = True
 
         return reward, self.DONE
     
