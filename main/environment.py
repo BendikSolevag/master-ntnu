@@ -44,6 +44,7 @@ class SalmonFarmEnv:
       - 3: harvest (terminal)
     """
     def __init__(self,
+                 infinite=True,
                  max_time=20,
                  max_fish=1000,
                  fish_price=5.0,
@@ -60,6 +61,7 @@ class SalmonFarmEnv:
         N_ZERO=150000
         G_ZERO=0.2       
         L_ZERO=150
+        self.infinite = infinite
 
         # State variables
         self.N_ZERO = N_ZERO
@@ -160,7 +162,9 @@ class SalmonFarmEnv:
             reward -= self.cost_harvest
             self.GROWTH_OPEN = 0
             self.NUMBER_OPEN = 0
-            return reward, self.DONE
+            if not self.infinite:
+                self.DONE = 1
+                return reward, self.DONE
         
 
         #
