@@ -10,7 +10,7 @@ class Actor(torch.nn.Module):
         self.out_layer = torch.nn.Linear(64, action_space)
         self.relu = torch.nn.ReLU()
         self.softmax = torch.nn.Softmax(dim=0)
-        self.opt = torch.optim.Adam(self.parameters(), lr=1e-4)
+        self.opt = torch.optim.Adam(self.parameters(), lr=1e-3)
         self.to(torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'))
 
     def forward(self, x):

@@ -51,7 +51,7 @@ class SalmonFarmEnv:
                  cost_closed=1.0,
                  cost_open=0.5,
                  cost_treatment=1e5,
-                 cost_plant=1e1,
+                 cost_plant=1e5,
                  cost_move=1e5,
                  cost_feed=0.14,
                  cost_harvest=1e5,
@@ -138,7 +138,8 @@ class SalmonFarmEnv:
 
     def step(self, action: int) -> tuple[tuple[float, float, float, float, int, float], float, bool]:
         if action == 3:
-            print("harvest action")
+            #print("harvest action")
+            pass
         # Set reward equal zero
         reward = 0.0
         # Iterate price to next value:
@@ -181,8 +182,8 @@ class SalmonFarmEnv:
             
             if not self.infinite:
                 return reward, self.DONE
-            print(harvest_revenue)
-            print(self.cost_harvest)
+            #print(harvest_revenue)
+            #print(self.cost_harvest)
             
         
 
@@ -248,28 +249,32 @@ class SalmonFarmEnv:
         if self.NUMBER_OPEN > 0: 
             cost_operation += self.cost_open
         
-        if action == 3:
-            print(cost_operation)
+        #if action == 3:
+        #    print(cost_operation)
         reward -= cost_operation
 
         cost_treatment = self.cost_treatment if self.TREATING else 0
-        if action == 3:
-            print(cost_treatment)
+        #if action == 3:
+        #    print(cost_treatment)
         reward -= cost_treatment
 
         cost_feed_closed = self.feed_per_fish * self.GROWTH_CLOSED * self.NUMBER_CLOSED * self.cost_feed
         cost_feed_open = self.feed_per_fish * self.GROWTH_OPEN * self.NUMBER_OPEN * self.cost_feed
-        if action == 3:
-            print(cost_feed_closed)
-        if action == 3:
-            print(cost_feed_open)
+        #if action == 3:
+        #    print(cost_feed_closed)
+        #if action == 3:
+        #    print(cost_feed_open)
         reward -= (cost_feed_closed + cost_feed_open)
 
         # If max biomass is exceeded, punish reward
         if self.NUMBER_OPEN * self.GROWTH_OPEN + self.NUMBER_CLOSED * self.GROWTH_CLOSED >= self.max_biomass:
-            if action == 3:
-                print(1e8)
+            #if action == 3:
+            #    print(1e8)
             reward -= 1e8
+
+        # We want to ensure there are fish in the tank at all times, so we punish when tanks are empty
+        if (self.NUMBER_CLOSED + self.NUMBER_OPEN) == 0:
+            reward -= 1e6
 
         # Reset window of treatment occurs in current timestep (threshold reahed 2 weeks ago)
         if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
