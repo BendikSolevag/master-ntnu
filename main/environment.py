@@ -292,7 +292,7 @@ def schwartz_two_factor_generator(P0, delta0, r, lambda_, kappa, alpha, sigma1, 
         dW = np.random.randn(2) * np.sqrt(dt)
         
         dZ1, dZ2 = L @ dW
-        dZ1, dZ2 = 0, 0
+        #dZ1, dZ2 = 0, 0
         
 
         # Update convenience yield (Ornstein-Uhlenbeck process)

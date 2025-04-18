@@ -7,6 +7,7 @@ from collections import deque
 from environment import SalmonFarmEnv
 import time
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 
 class QNetwork(nn.Module):
@@ -228,25 +229,56 @@ def main():
 if __name__ == "__main__":
     #main()
     
+    data = []
+
+    pbar = tqdm(total=(55-3) * 1000)
     
-
-    env = SalmonFarmEnv(infinite=False)
-    total_r = 0
+    for l in range(3, 55):
+        lll = []
+        for _ in range(1000):
+            pbar.update(1)
+            length = l * 2
+            env = SalmonFarmEnv(infinite=False)
+            total_r = 0
+            for _ in range(int(length / 2)):
+                r, d = env.step(0)
+                total_r += r
+            r, d = env.step(2)
+            total_r += r
+            for _ in range(int(length / 2)):
+                r, d = env.step(0)
+                total_r += r
+            r, d = env.step(3)
+            total_r += r
+            lll.append(total_r)
+        data.append(lll)    
     
-    
-    for _ in range(10):
-        r, d = env.step(0)
-        total_r += r
+    # Compute the mean and standard error for each list
+    means = np.array([np.mean(d) for d in data])
+    margin_errors_top = []
+    margin_errors_bot = []
+    for i in range(len(data)):
+        lll = data[i]
+        lll = sorted(lll)
+        margin_errors_bot.append(means[i] - lll[50])
+        margin_errors_top.append(lll[950] - means[i])
 
-    r, d = env.step(2)
-    total_r += r
+    # Calculate the margin of error for a 95% confidence interval (using 1.96 as the z-value)
+    margin_errors = [margin_errors_top, margin_errors_bot]
+    print(len(means))
+    print(len(margin_errors_top))
+    print(len(margin_errors_bot))
 
-    for _ in range(10):
-        r, d = env.step(0)
-        total_r += r
+    # Prepare the x-axis values (e.g., index of each list)
+    x = np.arange(1, len(data) + 1)
+    x = x * 2
 
-    r, d = env.step(3)
-    total_r += r
+    # Plot using errorbar
+    plt.errorbar(x, means, yerr=margin_errors, fmt='o', capsize=5, linestyle='none')
+    plt.xlabel('Cycle length')
+    plt.ylabel('Mean Value')
+    plt.title('95% Confidence Intervals for Each List')
+    plt.savefig('./environment_dynamics.png', format="png", dpi=500)
+    plt.show()
+    plt.close()
 
-    print("{:e}".format(total_r))
-    
