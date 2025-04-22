@@ -221,16 +221,17 @@ class SalmonFarmEnv:
         # If action is move => move closed individuals to open, reset closed
         if action == 2:
             #reward -= self.cost_move
-            self.NUMBER_OPEN = self.NUMBER_CLOSED
-            self.GROWTH_OPEN = self.GROWTH_CLOSED
-            self.AGE_OPEN = self.AGE_CLOSED
-            self.NUMBER_CLOSED = 0
-            self.GROWTH_CLOSED = 0
-            self.AGE_CLOSED = 0
+            if self.NUMBER_CLOSED > 0:
+                self.NUMBER_OPEN = self.NUMBER_CLOSED
+                self.GROWTH_OPEN = self.GROWTH_CLOSED
+                self.AGE_OPEN = self.AGE_CLOSED
+                self.NUMBER_CLOSED = 0
+                self.GROWTH_CLOSED = 0
+                self.AGE_CLOSED = 0
 
         # If action is harvest => give reward, reset open
         if action == 3:
-            harvest_revenue = self.GROWTH_OPEN * np.log(self.NUMBER_OPEN) * self.PRICE
+            harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE * 0.0001
             reward += harvest_revenue
             #reward -= self.cost_harvest
             self.GROWTH_OPEN = 0
@@ -298,6 +299,7 @@ class SalmonFarmEnv:
         self.resolve_treat_window_reset()
 
         reward -= 1
+
         return reward, self.DONE
     
 
