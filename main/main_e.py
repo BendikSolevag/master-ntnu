@@ -15,7 +15,7 @@ def main():
     agent = PGAgent(len(state), 4, 0.001, 0.001, 0.01)
 
     stats_rewards_list = [] # store stats for plotting in this
-    stats_every = 10 # print stats every this many episodes
+    stats_every = 100 # print stats every this many episodes
     stats_actor_loss, stats_vf_loss = 0., 0.
     
 
@@ -38,6 +38,8 @@ def main():
             action = agent.select_action(state)
         
             reward, done = env.step(action)
+            
+            total_reward += reward
         
             next_state = env.get_state()
 
@@ -74,14 +76,26 @@ class PGAgent():
         self.discount = discount
         
     def select_action(self, state):
-        #get action probs then randomly sample from the probabilities
-        with torch.no_grad():
+        try:
+            #get action probs then randomly sample from the probabilities
+            with torch.no_grad():
+                input_state = torch.FloatTensor(state)
+                action_probs = self.actor_net(input_state)
+                #detach and turn to numpy to use with np.random.choice()
+                action_probs = action_probs.detach().cpu().numpy()
+                action = np.random.choice(np.arange(self.action_size), p=action_probs)
+            return action
+        except Exception as e:
+            
+            print('state', state)
             input_state = torch.FloatTensor(state)
+            print('input_state', input_state)
             action_probs = self.actor_net(input_state)
-            #detach and turn to numpy to use with np.random.choice()
-            action_probs = action_probs.detach().cpu().numpy()
-            action = np.random.choice(np.arange(self.action_size), p=action_probs)
-        return action
+            print('action_probs', action_probs)
+            print('e', e)
+            print('message', e.message)
+            print('args', e.args)
+            return
 
     def train(self, state_list, action_list, reward_list):
         
@@ -100,8 +114,8 @@ class PGAgent():
         
         # get value function estimates
         vf_t = self.vf_net(state_t)
-        with torch.no_grad():
-            advantage_t = return_t - vf_t
+        
+        advantage_t = (return_t - vf_t).clone().detach()
         
         # calculate actor loss
         selected_action_prob = self.actor_net(state_t).gather(1, action_t)

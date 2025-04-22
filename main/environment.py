@@ -231,7 +231,7 @@ class SalmonFarmEnv:
 
         # If action is harvest => give reward, reset open
         if action == 3:
-            harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE * 0.0001
+            harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE * 0.01
             reward += harvest_revenue
             #reward -= self.cost_harvest
             self.GROWTH_OPEN = 0
