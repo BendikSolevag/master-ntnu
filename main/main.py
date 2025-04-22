@@ -21,8 +21,7 @@ def main():
     R_bar = torch.tensor(0.0)
 
 
-    num_episodes = 1000
-    max_steps_per_episode = 200
+    
     
     gro = []
     grc = []
@@ -34,14 +33,14 @@ def main():
     
     fix, ax = plt.subplots(3, 2)
     
-    for ep in tqdm(range(num_episodes * max_steps_per_episode)):
+    for ep in tqdm(range(25000)):
 
         
         out = actor(state)
         probs = torch.distributions.Categorical(out)
         action = probs.sample()
         
-        if  ep < 5000:
+        if ep < 5000:
             action = torch.tensor(0)
             if ii == 35:
                 action = torch.tensor(2)
@@ -52,9 +51,10 @@ def main():
                 ii = 0
 
         log_probs = probs.log_prob(action)        
+    
         reward, done = env.step(action)
         
-        
+
         gro.append(env.GROWTH_OPEN)
         grc.append(env.GROWTH_CLOSED)
         no.append(env.NUMBER_OPEN)

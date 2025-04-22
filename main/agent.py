@@ -13,7 +13,8 @@ class Actor(torch.nn.Module):
         self.opt = torch.optim.Adam(self.parameters(), lr=1e-3)
         self.to(torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'))
 
-    def forward(self, x):
+    def forward(self, x):   
+        x = torch.log(x + 1)
         a1 = self.in_layer(x)
         z1 = self.relu(a1)
         a2 = self.mid_layer(z1)
@@ -35,6 +36,7 @@ class Critic(torch.nn.Module):
         self.to(torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'))
 
     def forward(self, x):
+        x = torch.log(x + 1)
         a1 = self.in_layer(x)
         z1 = self.relu(a1)
         a2 = self.mid_layer(z1)

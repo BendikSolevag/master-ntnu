@@ -52,7 +52,7 @@ class SalmonFarmEnv:
                  cost_open=0.5,
                  cost_treatment=1e5,
                  cost_plant=1e5,
-                 cost_move=1e5,
+                 cost_move=1e6,
                  cost_feed=0.14,
                  cost_harvest=1e5,
                  discount=0.99, 
@@ -114,7 +114,7 @@ class SalmonFarmEnv:
     def get_state(self):
         return [self.PRICE, self.LICE, self.GROWTH_CLOSED, self.NUMBER_CLOSED, self.GROWTH_OPEN, self.NUMBER_OPEN, self.TREATING]
 
-    def resolve_mortalityrate(self):
+    def resolve_mortalityrate(self) -> float:
         categorydraw = np.random.uniform()
         if categorydraw >= 0.999**2:
             # gt 50% mortality
@@ -134,16 +134,13 @@ class SalmonFarmEnv:
         if categorydraw >= 0.894*0.853:
             # gt 1% mortality
             return np.random.uniform(0.01, 0.025)
-        return 0
+        return 0.0
 
-    def step(self, action: int) -> tuple[tuple[float, float, float, float, int, float], float, bool]:
-        if action == 3:
-            #print("harvest action")
-            pass
+    def step(self, action: int):
         # Set reward equal zero
         reward = 0.0
         # Iterate price to next value:
-        self.PRICE = 120 # next(self.PRICE_GENERATOR)
+        self.PRICE = 1 # next(self.PRICE_GENERATOR)
         self.lice_t += 1/52
         self.AGE_CLOSED += 1/52
         self.AGE_OPEN += 1/52
@@ -158,11 +155,11 @@ class SalmonFarmEnv:
                 self.NUMBER_CLOSED = self.N_ZERO
                 self.GROWTH_CLOSED = self.G_ZERO
                 self.AGE_CLOSED = 0
-            reward -= self.cost_plant * self.N_ZERO
+            #reward -= self.cost_plant * self.N_ZERO
 
         # If action is move => move closed individuals to open, reset closed
         if action == 2:
-            reward -= self.cost_move
+            #reward -= self.cost_move
             self.NUMBER_OPEN = self.NUMBER_CLOSED
             self.GROWTH_OPEN = self.GROWTH_CLOSED
             self.AGE_OPEN = self.AGE_CLOSED
@@ -172,21 +169,25 @@ class SalmonFarmEnv:
 
         # If action is harvest => give reward, reset open
         if action == 3:
-            harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE
+            harvest_revenue = self.GROWTH_OPEN * np.log(self.NUMBER_OPEN) * self.PRICE
             reward += harvest_revenue
-            reward -= self.cost_harvest
+            #reward -= self.cost_harvest
             self.GROWTH_OPEN = 0
             self.NUMBER_OPEN = 0
             self.AGE_OPEN = 0
             self.DONE = 1
-            
-            if not self.infinite:
+
+            # If infinite, immediately plant new generation
+            if self.infinite:
+                self.NUMBER_CLOSED = self.N_ZERO
+                self.GROWTH_CLOSED = self.G_ZERO
+                self.AGE_CLOSED = 0
+                #reward -= self.cost_plant * self.N_ZERO
+            else:
                 return reward, self.DONE
             #print(harvest_revenue)
             #print(self.cost_harvest)
             
-        
-
         #
         # Update state variables
         #
@@ -220,10 +221,18 @@ class SalmonFarmEnv:
                 0, #mean_voksne_hunnlus, 0 as the system is closed
             ] 
             pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
+            
+            # Cap prediction within reasonable range
+            pred = max(min(pred, 8), 0.1)
+            
             # Adjust monthly to weekly
             g_rate = np.log(pred / self.GROWTH_CLOSED) / 4.345
-            greater_factor = (8 - g_rate) / np.abs(8 - g_rate) 
-            self.GROWTH_CLOSED *= np.exp(g_rate * greater_factor * np.sqrt(np.abs(1 - (self.GROWTH_CLOSED / 8))))
+            self.GROWTH_CLOSED *= np.exp(g_rate)
+
+            if self.GROWTH_CLOSED > 8:
+                print('pred', pred)
+                print('g_rate', g_rate)
+                print('GROWTH_CLOSED', self.GROWTH_CLOSED)
 
         if self.NUMBER_OPEN > 0 and self.TREATING == 0.0:
             # Open
@@ -234,10 +243,13 @@ class SalmonFarmEnv:
                 self.LICE, #mean_voksne_hunnlus,
             ] 
             pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
+            
+            # Cap prediction within reasonable range
+            pred = max(min(pred, 8), 0.1)
+
             # Adjust monthly to weekly
             g_rate = np.log(pred / self.GROWTH_OPEN) / 4.345
-            greater_factor = (8 - g_rate) / np.abs(8 - g_rate) 
-            self.GROWTH_OPEN *= np.exp(g_rate * greater_factor * np.sqrt(np.abs(1 - (self.GROWTH_OPEN / 8))))        
+            self.GROWTH_OPEN *= np.exp(g_rate)
 
 
         #
@@ -248,15 +260,14 @@ class SalmonFarmEnv:
             cost_operation += self.cost_closed
         if self.NUMBER_OPEN > 0: 
             cost_operation += self.cost_open
+        #reward -= cost_operation
         
-        #if action == 3:
-        #    print(cost_operation)
-        reward -= cost_operation
+        
 
         cost_treatment = self.cost_treatment if self.TREATING else 0
         #if action == 3:
         #    print(cost_treatment)
-        reward -= cost_treatment
+        #reward -= cost_treatment
 
         cost_feed_closed = self.feed_per_fish * self.GROWTH_CLOSED * self.NUMBER_CLOSED * self.cost_feed
         cost_feed_open = self.feed_per_fish * self.GROWTH_OPEN * self.NUMBER_OPEN * self.cost_feed
@@ -264,17 +275,17 @@ class SalmonFarmEnv:
         #    print(cost_feed_closed)
         #if action == 3:
         #    print(cost_feed_open)
-        reward -= (cost_feed_closed + cost_feed_open)
+        #reward -= (cost_feed_closed + cost_feed_open)
 
         # If max biomass is exceeded, punish reward
         if self.NUMBER_OPEN * self.GROWTH_OPEN + self.NUMBER_CLOSED * self.GROWTH_CLOSED >= self.max_biomass:
             #if action == 3:
             #    print(1e8)
-            reward -= 1e8
+            reward -= 3
 
         # We want to ensure there are fish in the tank at all times, so we punish when tanks are empty
         if (self.NUMBER_CLOSED + self.NUMBER_OPEN) == 0:
-            reward -= 1e6
+            reward -= 3
 
         # Reset window of treatment occurs in current timestep (threshold reahed 2 weeks ago)
         if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
@@ -282,7 +293,7 @@ class SalmonFarmEnv:
           self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
           if self.NUMBER_OPEN > 0:  
             self.sliding_window_lice[-1] = self.LICE/self.NUMBER_OPEN
-
+        reward -= 1
         return reward, self.DONE
     
 
