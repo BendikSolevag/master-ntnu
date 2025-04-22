@@ -136,6 +136,67 @@ class SalmonFarmEnv:
             return np.random.uniform(0.01, 0.025)
         return 0.0
 
+
+    def resolve_lice(self):
+        seasonal_mean = theta(self.lice_t, self.lice_a, self.lice_b, self.lice_phi)
+        self.LICE = (1 - self.lice_kappa) * self.LICE + self.lice_kappa * seasonal_mean + np.random.normal(0, self.lice_sigma)**2
+    
+    def resolve_treating(self):
+        self.sliding_window_lice.pop(0)
+        self.sliding_window_lice.append(self.LICE)
+        window_exceeds = [True if x > self.LICE_TREAT_THRESHOLD else False for x in self.sliding_window_lice]
+        self.TREATING = 1.0 if any(window_exceeds) else 0.0
+
+    def resolve_mortality(self):
+        # Population loss due to treatment
+        if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
+            mr = self.resolve_mortalityrate()
+            self.NUMBER_OPEN = self.NUMBER_OPEN - mr * self.NUMBER_OPEN
+
+    def resolve_growth_closed(self):
+        if self.NUMBER_CLOSED <= 0:
+            return
+        # Closed
+        explanatory = [
+            round(self.AGE_CLOSED), #generation_approx_age, 
+            self.GROWTH_CLOSED * self.feed_per_fish * 30, #feedamountperfish, 
+            self.GROWTH_CLOSED, #mean_size,
+            0, #mean_voksne_hunnlus, 0 as the system is closed
+        ] 
+        pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
+        # Cap prediction within reasonable range
+        pred = max(min(pred, 8), 0.1)
+        # Adjust monthly to weekly
+        g_rate = np.log(pred / self.GROWTH_CLOSED) / 4.345
+        self.GROWTH_CLOSED *= np.exp(g_rate)
+    
+    def resolve_growth_open(self):
+        if self.NUMBER_OPEN <= 0 or self.TREATING == 0.0:
+            return
+        explanatory = [
+            round(self.AGE_OPEN), #generation_approx_age, 
+            self.GROWTH_OPEN * self.feed_per_fish * 30, #feedamountperfish, 
+            self.GROWTH_OPEN, #mean_size,
+            self.LICE, #mean_voksne_hunnlus,
+        ] 
+        pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()  
+        # Cap prediction within reasonable range
+        pred = max(min(pred, 8), 0.1)
+        # Adjust monthly to weekly
+        g_rate = np.log(pred / self.GROWTH_OPEN) / 4.345
+        self.GROWTH_OPEN *= np.exp(g_rate)
+
+    def resolve_treat_window_reset(self):
+        if self.sliding_window_lice[0] <= self.LICE_TREAT_THRESHOLD:
+          return
+        
+        self.LICE = 0.1 * self.LICE + 0.9 * self.LICE * np.random.beta(2.5, 5)
+        self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
+        if self.NUMBER_OPEN > 0:  
+            self.sliding_window_lice[-1] = self.LICE/self.NUMBER_OPEN
+
+
+
     def step(self, action: int):
         # Set reward equal zero
         reward = 0.0
@@ -183,73 +244,19 @@ class SalmonFarmEnv:
                 self.GROWTH_CLOSED = self.G_ZERO
                 self.AGE_CLOSED = 0
                 #reward -= self.cost_plant * self.N_ZERO
+            
             else:
                 return reward, self.DONE
             #print(harvest_revenue)
             #print(self.cost_harvest)
             
-        #
+        
         # Update state variables
-        #
-
-        # Lice
-        seasonal_mean = theta(self.lice_t, self.lice_a, self.lice_b, self.lice_phi)
-        self.LICE = (1 - self.lice_kappa) * self.LICE + self.lice_kappa * seasonal_mean + np.random.normal(0, self.lice_sigma)**2
-
-
-        # Treatment
-        self.sliding_window_lice.pop(0)
-        self.sliding_window_lice.append(self.LICE)
-        window_exceeds = [True if x > self.LICE_TREAT_THRESHOLD else False for x in self.sliding_window_lice]
-        self.TREATING = 1.0 if any(window_exceeds) else 0.0
-
-        # Population loss due to treatment
-        if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
-            mr = self.resolve_mortalityrate()
-            self.NUMBER_OPEN = self.NUMBER_OPEN - mr * self.NUMBER_OPEN
-
-        #
-        # Grow population in open/closed system
-        #
-
-        if self.NUMBER_CLOSED > 0:
-            # Closed
-            explanatory = [
-                round(self.AGE_CLOSED), #generation_approx_age, 
-                self.GROWTH_CLOSED * self.feed_per_fish * 30, #feedamountperfish, 
-                self.GROWTH_CLOSED, #mean_size,
-                0, #mean_voksne_hunnlus, 0 as the system is closed
-            ] 
-            pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
-            
-            # Cap prediction within reasonable range
-            pred = max(min(pred, 8), 0.1)
-            
-            # Adjust monthly to weekly
-            g_rate = np.log(pred / self.GROWTH_CLOSED) / 4.345
-            self.GROWTH_CLOSED *= np.exp(g_rate)
-
-            if self.GROWTH_CLOSED > 8:
-                print('pred', pred)
-                print('g_rate', g_rate)
-                print('GROWTH_CLOSED', self.GROWTH_CLOSED)
-
-        if self.NUMBER_OPEN > 0 and self.TREATING == 0.0:
-            # Open
-            explanatory = [
-                round(self.AGE_OPEN), #generation_approx_age, 
-                self.GROWTH_OPEN * self.feed_per_fish * 30, #feedamountperfish, 
-                self.GROWTH_OPEN, #mean_size,
-                self.LICE, #mean_voksne_hunnlus,
-            ] 
-            pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
-            
-            # Cap prediction within reasonable range
-            pred = max(min(pred, 8), 0.1)
-
-            # Adjust monthly to weekly
-            g_rate = np.log(pred / self.GROWTH_OPEN) / 4.345
-            self.GROWTH_OPEN *= np.exp(g_rate)
+        self.resolve_lice()
+        self.resolve_treating()
+        self.resolve_mortality()
+        self.resolve_growth_closed()
+        self.resolve_growth_open()
 
 
         #
@@ -288,11 +295,8 @@ class SalmonFarmEnv:
             reward -= 3
 
         # Reset window of treatment occurs in current timestep (threshold reahed 2 weeks ago)
-        if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
-          self.LICE = 0.1 * self.LICE + 0.9 * self.LICE * np.random.beta(2.5, 5)
-          self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
-          if self.NUMBER_OPEN > 0:  
-            self.sliding_window_lice[-1] = self.LICE/self.NUMBER_OPEN
+        self.resolve_treat_window_reset()
+
         reward -= 1
         return reward, self.DONE
     
