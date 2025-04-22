@@ -21,8 +21,6 @@ def main():
     R_bar = torch.tensor(0.0)
 
 
-    
-    
     gro = []
     grc = []
     no = []
