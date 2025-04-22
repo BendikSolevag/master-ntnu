@@ -58,7 +58,6 @@ def main():
         
         if ep > 0 and ep % stats_every == 0:
             print('Episode: {}'.format(ep),
-                'Timestep: {}'.format(timesteps),
                 'Total reward: {:.1f}'.format(np.mean(stats_rewards_list[-stats_every:],axis=0)[1]),
                 'Episode length: {:.1f}'.format(np.mean(stats_rewards_list[-stats_every:],axis=0)[2]),
                 'Actor Loss: {:.4f}'.format(stats_actor_loss/stats_every), 
