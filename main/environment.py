@@ -48,13 +48,13 @@ class SalmonFarmEnv:
                  max_time=20,
                  max_fish=1000,
                  fish_price=5.0,
-                 cost_closed=1.0,
-                 cost_open=0.5,
-                 cost_treatment=1e5,
+                 cost_closed=5.1e3,
+                 cost_open=5.1e3,
+                 cost_treatment=1.5e5,
                  cost_plant=1e5,
                  cost_move=1e6,
-                 cost_feed=0.14,
-                 cost_harvest=1e5,
+                 cost_feed=5,
+                 cost_harvest=7.3e5,
                  discount=0.99, 
                  time_step_size=1/52):
         
@@ -75,7 +75,7 @@ class SalmonFarmEnv:
         self.AGE_OPEN = 0
 
         self.PRICE_GENERATOR = schwartz_two_factor_generator(100, 0.01, 0.045, 0.01, 0.1, 0.05, 0.2, 0.2, 0.8, time_step_size)
-        self.PRICE = next(self.PRICE_GENERATOR)
+        self.PRICE = 100 #next(self.PRICE_GENERATOR)
 
         self.TREATING = 0
         self.DONE = 0
@@ -110,6 +110,12 @@ class SalmonFarmEnv:
         self.growth_model = GrowthNN(input_size=4)
         self.growth_model.load_state_dict(torch.load('./models/growth/1743671011.288821-model.pt', weights_only=True))
         self.growth_model.eval()
+
+        # Track total costs
+        self.total_cost_feed = 0
+        self.total_cost_harvest = 0
+        self.total_cost_operation = 0
+        self.total_cost_treatment = 0
 
     def get_state(self):
         return [self.PRICE, self.LICE, self.GROWTH_CLOSED, self.NUMBER_CLOSED, self.GROWTH_OPEN, self.NUMBER_OPEN, self.TREATING]
@@ -171,7 +177,7 @@ class SalmonFarmEnv:
         self.GROWTH_CLOSED *= np.exp(g_rate)
     
     def resolve_growth_open(self):
-        if self.NUMBER_OPEN <= 0 or self.TREATING == 0.0:
+        if self.NUMBER_OPEN <= 0 or self.TREATING == 1.0:
             return
         explanatory = [
             round(self.AGE_OPEN), #generation_approx_age, 
@@ -196,12 +202,11 @@ class SalmonFarmEnv:
             self.sliding_window_lice[-1] = self.LICE/self.NUMBER_OPEN
 
 
-
     def step(self, action: int):
         # Set reward equal zero
         reward = 0.0
         # Iterate price to next value:
-        self.PRICE = 1 # next(self.PRICE_GENERATOR)
+        self.PRICE = 100 #next(self.PRICE_GENERATOR)
         self.lice_t += 1/52
         self.AGE_CLOSED += 1/52
         self.AGE_OPEN += 1/52
@@ -231,12 +236,13 @@ class SalmonFarmEnv:
 
         # If action is harvest => give reward, reset open
         if action == 3:
-            harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE * 0.01
+            harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE
             reward += harvest_revenue
-            #reward -= self.cost_harvest
-            self.GROWTH_OPEN = 0
-            self.NUMBER_OPEN = 0
-            self.AGE_OPEN = 0
+            reward -= self.cost_harvest
+            self.total_cost_harvest += self.cost_harvest
+            #self.GROWTH_OPEN = 0
+            #self.NUMBER_OPEN = 0
+            #self.AGE_OPEN = 0
             self.DONE = 1
 
             # If infinite, immediately plant new generation
@@ -248,10 +254,8 @@ class SalmonFarmEnv:
             
             else:
                 return reward, self.DONE
-            #print(harvest_revenue)
-            #print(self.cost_harvest)
             
-        
+
         # Update state variables
         self.resolve_lice()
         self.resolve_treating()
@@ -268,14 +272,17 @@ class SalmonFarmEnv:
             cost_operation += self.cost_closed
         if self.NUMBER_OPEN > 0: 
             cost_operation += self.cost_open
-        #reward -= cost_operation
+        reward -= cost_operation
+        self.total_cost_operation += cost_operation
         
         
-
-        cost_treatment = self.cost_treatment if self.TREATING else 0
+        cost_treatment = 0
+        if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD and self.NUMBER_OPEN > 0:
+            cost_treatment = self.cost_treatment
         #if action == 3:
         #    print(cost_treatment)
-        #reward -= cost_treatment
+        reward -= cost_treatment
+        self.total_cost_treatment += cost_treatment
 
         cost_feed_closed = self.feed_per_fish * self.GROWTH_CLOSED * self.NUMBER_CLOSED * self.cost_feed
         cost_feed_open = self.feed_per_fish * self.GROWTH_OPEN * self.NUMBER_OPEN * self.cost_feed
@@ -283,7 +290,8 @@ class SalmonFarmEnv:
         #    print(cost_feed_closed)
         #if action == 3:
         #    print(cost_feed_open)
-        #reward -= (cost_feed_closed + cost_feed_open)
+        reward -= (cost_feed_closed + cost_feed_open)
+        self.total_cost_feed += (cost_feed_closed + cost_feed_open)
 
         # If max biomass is exceeded, punish reward
         if self.NUMBER_OPEN * self.GROWTH_OPEN + self.NUMBER_CLOSED * self.GROWTH_CLOSED >= self.max_biomass:
@@ -291,14 +299,10 @@ class SalmonFarmEnv:
             #    print(1e8)
             reward -= 3
 
-        # We want to ensure there are fish in the tank at all times, so we punish when tanks are empty
-        if (self.NUMBER_CLOSED + self.NUMBER_OPEN) == 0:
-            reward -= 3
+        
 
         # Reset window of treatment occurs in current timestep (threshold reahed 2 weeks ago)
         self.resolve_treat_window_reset()
-
-        reward -= 1
 
         return reward, self.DONE
     

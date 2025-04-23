@@ -1,5 +1,7 @@
 import numpy as np
-
+import matplotlib.pyplot as plt
+import time
+from tqdm import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -74,24 +76,33 @@ class Agent():
 def main():
     env = SalmonFarmEnv(infinite=False)
     state = torch.tensor(env.get_state(), dtype=torch.float32)
-    print(state)
+    now = time.time()
     
     agent = Agent(0.001, [len(state)], 32, 32, 4)
 
     stats_rewards_list = [] # store stats for plotting in this
     stats_every = 100 # print stats every this many episodes
-    stats_actor_loss, stats_vf_loss = 0., 0.
+    fig, ax = plt.subplots(3, 1)
+
+    top_rew = -float('inf')
     
 
-    for ep in range(25000):
+    for ep in tqdm(range(1000000)):
         total_reward = 0
         timesteps = 0
         env = SalmonFarmEnv(infinite=False)
         state = env.get_state()
         
         state_list, action_list, reward_list = [], [], []
+
+        growthlist_c = []
+        growthlist_o = []
+        treatlist = []
         
         while True:
+            growthlist_c.append(env.GROWTH_CLOSED)
+            growthlist_o.append(env.GROWTH_OPEN)
+            treatlist.append(env.TREATING)
             timesteps += 1
 
             if env.DONE == 1:
@@ -100,10 +111,20 @@ def main():
                 break
             
             action = agent.choose_action(state)
-            if env.lice_t < 0.5:
+            if timesteps < 30:
                 action = 0
-            if env.lice_t > 2:
-                action = 3
+            
+            #if timesteps > 120:
+            #    action = 3
+            
+            if ep < 1000:
+                if timesteps == 30:
+                    action = 2
+
+                if timesteps == 70:
+                    action = 3
+            
+            
             reward, done = env.step(action)
             
             total_reward += reward
@@ -118,15 +139,31 @@ def main():
             state = next_state
         
         
+        if False and ep == 500:
+            ax[0].plot(growthlist_c)
+            ax[1].plot(growthlist_o)
+            ax[2].plot(treatlist)
+            plt.show()
         stats_rewards_list.append((ep, total_reward, timesteps))
 
-        if ep > 0 and ep % stats_every == 0:
+        if ep % stats_every == 0:
+            if np.mean(stats_rewards_list[-stats_every:],axis=0)[1] > top_rew:
+                top_rew = np.mean(stats_rewards_list[-stats_every:],axis=0)[1]
+                print('new top: ', top_rew)
+                sd = agent.actor_critic.state_dict()
+                torch.save(sd, f'./models/agent/{now}-model.pt')
+
+
+            
+            print(env.total_cost_feed)
+            print('feed', round(env.total_cost_feed / ((env.GROWTH_CLOSED * env.NUMBER_CLOSED) + (env.GROWTH_OPEN * env.NUMBER_OPEN)), 4))
+            print('trea', round(env.total_cost_treatment / env.total_cost_feed, 4))
+            print('harv', round(env.total_cost_harvest / env.total_cost_feed, 4))
+            print('oper', round(env.total_cost_operation / env.total_cost_feed, 4))
             print('Episode: {}'.format(ep),
                 'Total reward: {:.1f}'.format(np.mean(stats_rewards_list[-stats_every:],axis=0)[1]),
-                'Episode length: {:.1f}'.format(np.mean(stats_rewards_list[-stats_every:],axis=0)[2]),
-                'Actor Loss: {:.4f}'.format(stats_actor_loss/stats_every), 
-                'VF Loss: {:.4f}'.format(stats_vf_loss/stats_every))
-            stats_actor_loss, stats_vf_loss = 0., 0.
+                'Episode length: {:.1f}'.format(np.mean(stats_rewards_list[-stats_every:],axis=0)[2])
+            )
 
 
 if __name__ == '__main__':
