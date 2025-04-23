@@ -1,18 +1,82 @@
 import numpy as np
-import random
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from environment import SalmonFarmEnv
 from tqdm import tqdm
-from agent import Actor, Critic
+import numpy as np
+import torch as T
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+class ActorCriticNetwork(nn.Module):
+    def __init__(self, lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256):
+        super(ActorCriticNetwork, self).__init__()
+        self.fc1 = nn.Linear(*input_dims, fc1_dims)
+        self.fc2 = nn.Linear(fc1_dims, fc2_dims)
+        self.pi = nn.Linear(fc2_dims, n_actions)
+        self.v = nn.Linear(fc2_dims, 1)
+        self.optimizer = optim.Adam(self.parameters(), lr=lr)
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def forward(self, state):
+        x = F.relu(self.fc1(state))
+        x = F.relu(self.fc2(x))
+        pi = self.pi(x)
+        v = self.v(x)
+
+        return (pi, v)
+
+class Agent():
+    def __init__(self, lr, input_dims, fc1_dims, fc2_dims, n_actions, 
+                 gamma=0.99):
+        self.gamma = gamma
+        self.lr = lr
+        self.fc1_dims = fc1_dims
+        self.fc2_dims = fc2_dims
+        self.actor_critic = ActorCriticNetwork(lr, input_dims, n_actions, 
+                                               fc1_dims, fc2_dims)
+        self.log_prob = None
+
+    def choose_action(self, observation):
+        state = T.tensor([observation], dtype=T.float).to(self.actor_critic.device)
+        probabilities, _ = self.actor_critic.forward(state)
+        probabilities = F.softmax(probabilities, dim=1)
+        action_probs = T.distributions.Categorical(probabilities)
+        action = action_probs.sample()
+        log_prob = action_probs.log_prob(action)
+        self.log_prob = log_prob
+
+        return action.item()
+
+    def learn(self, state, reward, state_, done):
+        self.actor_critic.optimizer.zero_grad()
+
+        state = T.tensor([state], dtype=T.float).to(self.actor_critic.device)
+        state_ = T.tensor([state_], dtype=T.float).to(self.actor_critic.device)
+        reward = T.tensor(reward, dtype=T.float).to(self.actor_critic.device)
+
+        _, critic_value = self.actor_critic.forward(state)
+        _, critic_value_ = self.actor_critic.forward(state_)
+
+        delta = reward + self.gamma*critic_value_*(1-int(done)) - critic_value
+
+        actor_loss = -self.log_prob*delta
+        critic_loss = delta**2
+
+        (actor_loss + critic_loss).backward()
+        self.actor_critic.optimizer.step()
 
 
 def main():
     env = SalmonFarmEnv(infinite=False)
     state = torch.tensor(env.get_state(), dtype=torch.float32)
+    print(state)
     
-    agent = PGAgent(len(state), 4, 0.001, 0.001, 0.01)
+    agent = Agent(0.001, [len(state)], 32, 32, 4)
 
     stats_rewards_list = [] # store stats for plotting in this
     stats_every = 100 # print stats every this many episodes
@@ -35,13 +99,17 @@ def main():
             if timesteps > 199:
                 break
             
-            action = agent.select_action(state)
-        
+            action = agent.choose_action(state)
+            if env.lice_t < 0.5:
+                action = 0
+            if env.lice_t > 2:
+                action = 3
             reward, done = env.step(action)
             
             total_reward += reward
-        
             next_state = env.get_state()
+
+            agent.learn(state, reward, next_state, done)
 
             state_list.append(state)
             action_list.append(action)
@@ -50,12 +118,8 @@ def main():
             state = next_state
         
         
-        actor_loss, vf_loss = agent.train(state_list, action_list, reward_list)
         stats_rewards_list.append((ep, total_reward, timesteps))
-        stats_actor_loss += actor_loss
-        stats_vf_loss += vf_loss
-        total_reward = 0
-        
+
         if ep > 0 and ep % stats_every == 0:
             print('Episode: {}'.format(ep),
                 'Total reward: {:.1f}'.format(np.mean(stats_rewards_list[-stats_every:],axis=0)[1]),
@@ -65,77 +129,6 @@ def main():
             stats_actor_loss, stats_vf_loss = 0., 0.
 
 
-class PGAgent():
-    def __init__(self, state_size, action_size, actor_lr, vf_lr, discount ):
-        self.action_size = action_size
-        self.actor_net = Actor(action_size, state_size)
-        self.vf_net = Critic(state_size)
-        self.actor_optimizer = optim.Adam(self.actor_net.parameters(), lr=actor_lr)
-        self.vf_optimizer = optim.Adam(self.vf_net.parameters(), lr=vf_lr)
-        self.discount = discount
-        
-    def select_action(self, state):
-        try:
-            #get action probs then randomly sample from the probabilities
-            with torch.no_grad():
-                input_state = torch.FloatTensor(state)
-                action_probs = self.actor_net(input_state)
-                #detach and turn to numpy to use with np.random.choice()
-                action_probs = action_probs.detach().cpu().numpy()
-                action = np.random.choice(np.arange(self.action_size), p=action_probs)
-            return action
-        except Exception as e:
-            
-            print('state', state)
-            input_state = torch.FloatTensor(state)
-            print('input_state', input_state)
-            action_probs = self.actor_net(input_state)
-            print('action_probs', action_probs)
-            print('e', e)
-            print('message', e.message)
-            print('args', e.args)
-            return
-
-    def train(self, state_list, action_list, reward_list):
-        
-        #turn rewards into return
-        trajectory_len = len(reward_list)
-        return_array = np.zeros((trajectory_len,))
-        g_return = 0.
-        for i in range(trajectory_len-1,-1,-1):
-            g_return = reward_list[i] + self.discount*g_return
-            return_array[i] = g_return
-            
-        # create tensors
-        state_t = torch.tensor(state_list, dtype=torch.float)
-        action_t = torch.tensor(action_list, dtype=torch.long).view(-1,1)
-        return_t = torch.tensor(return_array, dtype=torch.float).view(-1,1)
-        
-        # get value function estimates
-        vf_t = self.vf_net(state_t)
-        
-        advantage_t = (return_t - vf_t).clone().detach()
-        
-        # calculate actor loss
-        selected_action_prob = self.actor_net(state_t).gather(1, action_t)
-        # REINFORCE loss:
-        #actor_loss = torch.mean(-torch.log(selected_action_prob) * return_t)
-        # REINFORCE Baseline loss:
-        actor_loss = torch.mean(-torch.log(selected_action_prob) * advantage_t)
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        self.actor_optimizer.step() 
-
-        # calculate vf loss
-        loss_fn = nn.MSELoss()
-        vf_loss = loss_fn(vf_t, return_t)
-        self.vf_optimizer.zero_grad()
-        vf_loss.backward()
-        self.vf_optimizer.step() 
-        
-        return actor_loss.detach().cpu().numpy(), vf_loss.detach().cpu().numpy()
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
 
