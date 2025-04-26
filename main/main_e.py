@@ -74,6 +74,7 @@ class Agent():
 
 
 def main():
+    # The reinforce with baseline version is the most stable algorithm, but the problem is moreso with the design of the reward function. A 'least negative' reward signal works better than a 'most positive'. Why is this?
     env = SalmonFarmEnv(infinite=False)
     state = torch.tensor(env.get_state(), dtype=torch.float32)
     now = time.time()
@@ -114,16 +115,10 @@ def main():
             if timesteps < 30:
                 action = 0
             
-            #if timesteps > 120:
-            #    action = 3
+            if timesteps > 120:
+                action = 3
             
-            if ep < 1000:
-                if timesteps == 30:
-                    action = 2
 
-                if timesteps == 70:
-                    action = 3
-            
             
             reward, done = env.step(action)
             
@@ -153,9 +148,7 @@ def main():
                 sd = agent.actor_critic.state_dict()
                 torch.save(sd, f'./models/agent/{now}-model.pt')
 
-
             
-            print(env.total_cost_feed)
             print('feed', round(env.total_cost_feed / ((env.GROWTH_CLOSED * env.NUMBER_CLOSED) + (env.GROWTH_OPEN * env.NUMBER_OPEN)), 4))
             print('trea', round(env.total_cost_treatment / env.total_cost_feed, 4))
             print('harv', round(env.total_cost_harvest / env.total_cost_feed, 4))

@@ -1,11 +1,7 @@
-import numpy as np
-import random
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from collections import deque
 from environment import SalmonFarmEnv
 import time
+import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from agent import Actor, Critic
@@ -30,23 +26,34 @@ def main():
     ii = 0   
     
     fix, ax = plt.subplots(3, 2)
-    
+    forcegoodmoves = False
+    deltas_buffer_size = 200
+    deltas_buffer_idx = 0
+    deltas = torch.tensor([0 for _ in range(deltas_buffer_size)])
+
     for ep in tqdm(range(25000)):
 
         
         out = actor(state)
         probs = torch.distributions.Categorical(out)
         action = probs.sample()
-        
-        if ep < 5000:
+
+        if forcegoodmoves:
             action = torch.tensor(0)
             if ii == 35:
                 action = torch.tensor(2)
+                forcegoodmoves = False
             if ii == 70:
                 action = torch.tensor(3)
             if ii == 71:
                 action = torch.tensor(1)
                 ii = 0
+
+        if action.item() == 2:
+            # With 20% probability, force next iteration to make good moves.
+            if np.random.random() < 0.2:
+                forcegoodmoves = True
+            ii = 0
 
         log_probs = probs.log_prob(action)        
     
@@ -69,8 +76,10 @@ def main():
 
         next_state = torch.tensor(env.get_state(), dtype=torch.float32)
         
-        delta = reward - R_bar + 0.99 * critic(next_state) - critic.forward(state)    
-        R_bar = ((1 - 1e-2) * R_bar + 1e-2 * delta).detach()
+        R_bar = torch.mean(deltas).detach()
+        delta = reward - R_bar + np.exp(-0.04) * critic(next_state) - critic.forward(state)    
+        deltas[deltas_buffer_idx] = delta
+        #R_bar = ((1 - 1e-2) * R_bar + 1e-2 * delta).detach()
 
         critic_loss = delta**2
         actor_loss = -torch.sum(log_probs) * delta
@@ -84,6 +93,7 @@ def main():
 
         state = next_state
 
+        deltas_buffer_idx = (deltas_buffer_idx + 1) % deltas_buffer_size
         ii = ii + 1
 
     ax[0, 0].plot(grc)
