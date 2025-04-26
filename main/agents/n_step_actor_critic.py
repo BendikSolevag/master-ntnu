@@ -5,7 +5,7 @@ from torch import nn
 from torch import optim
 
 class ActorCriticNetwork(nn.Module):
-    def __init__(self, lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256):
+    def __init__(self, lr, input_dims, n_actions, fc1_dims=64, fc2_dims=64):
         super().__init__()
         self.fc1 = nn.Linear(*input_dims, fc1_dims)
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
@@ -22,7 +22,7 @@ class ActorCriticNetwork(nn.Module):
         return self.pi(x), self.v(x)
 
 class Agent:
-    def __init__(self, lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256, gamma=0.99, n_step=200):
+    def __init__(self, lr, input_dims, n_actions, fc1_dims=64, fc2_dims=64, gamma=0.99, n_step=200):
         self.gamma = gamma
         self.n_step = n_step
         self.net = ActorCriticNetwork(lr, input_dims, n_actions, fc1_dims, fc2_dims)
@@ -73,7 +73,7 @@ class Agent:
         self.net.optimizer.step()
 
 
-    def remember_and_learn(self, state, action, reward, next_state, done):
+    def learn(self, state, action, reward, next_state, done):
         """Store transition and, when appropriate, perform a learning step."""
         self.buffer.append((state, action, reward))
 

@@ -3,7 +3,6 @@ from tqdm import tqdm
 from environment import SalmonFarmEnv
 from tqdm import tqdm
 import numpy as np
-import pickle
 import matplotlib.pyplot as plt
 import torch
 
@@ -44,7 +43,7 @@ def main():
 
                     total_rewards.append(total_reward)
                 rewards_dict[harvest_timestep][move_timestep] = total_rewards
-        torch.save(rewards_dict, './sim_rewards_dict.pt')
+        torch.save(rewards_dict, './assets/sim_rewards/sim_rewards_dict.pt')
         
     rewards_dict = torch.load('./sim_rewards_dict.pt')
 

@@ -3,7 +3,7 @@ import numpy as np
 import torch as T
 from tqdm import tqdm
 from estimates.estimate_growth import GrowthNN
-from main.n_step_actor_critic import Agent
+from main.agents.n_step_actor_critic import Agent
 
 
 
@@ -87,7 +87,7 @@ def main():
       reward, done = env.step(action)
       next_state = env.get_state()
 
-      agent.remember_and_learn(state, action, reward, next_state, done)
+      agent.learn(state, action, reward, next_state, done)
 
       if done:
         break

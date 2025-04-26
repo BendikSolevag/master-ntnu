@@ -1,15 +1,12 @@
 import numpy as np
-import torch
-from torch import nn
+import torch as T
 
-from estimates.estimate_growth import GrowthNN
+from util.growthmodel import GrowthNN
+
 
 # Seasonal mean function
 def theta(t, a, b, phi):
     return a + b * np.sin(2.0 * np.pi * (t / 52.0) + phi)
-
-
-
 
 class SalmonFarmEnv:
     """
@@ -90,7 +87,7 @@ class SalmonFarmEnv:
 
         # Growth rate NN
         self.growth_model = GrowthNN(input_size=4)
-        self.growth_model.load_state_dict(torch.load('./models/growth/1743671011.288821-model.pt', weights_only=True))
+        self.growth_model.load_state_dict(T.load('./models/growth/1743671011.288821-model.pt', weights_only=True))
         self.growth_model.eval()
 
         # Track total costs
@@ -151,7 +148,7 @@ class SalmonFarmEnv:
             self.GROWTH_CLOSED, #mean_size,
             0, #mean_voksne_hunnlus, 0 as the system is closed
         ] 
-        pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()
+        pred = self.growth_model.forward(T.tensor(explanatory, dtype=T.float32)).item()
         # Cap prediction within reasonable range
         pred = max(min(pred, 8), 0.1)
         # Adjust monthly to weekly
@@ -167,7 +164,7 @@ class SalmonFarmEnv:
             self.GROWTH_OPEN, #mean_size,
             self.LICE, #mean_voksne_hunnlus,
         ] 
-        pred = self.growth_model.forward(torch.tensor(explanatory, dtype=torch.float32)).item()  
+        pred = self.growth_model.forward(T.tensor(explanatory, dtype=T.float32)).item()  
         # Cap prediction within reasonable range
         pred = max(min(pred, 8), 0.1)
         # Adjust monthly to weekly
@@ -221,7 +218,6 @@ class SalmonFarmEnv:
             harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE
             reward += harvest_revenue
             reward -= self.cost_harvest
-            reward -= 1.3e8
             self.total_cost_harvest += self.cost_harvest
             #self.GROWTH_OPEN = 0
             #self.NUMBER_OPEN = 0
@@ -262,8 +258,6 @@ class SalmonFarmEnv:
         cost_treatment = 0
         if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD and self.NUMBER_OPEN > 0:
             cost_treatment = self.cost_treatment
-        #if action == 3:
-        #    print(cost_treatment)
         reward -= cost_treatment
         self.total_cost_treatment += cost_treatment
 
