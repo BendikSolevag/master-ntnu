@@ -21,7 +21,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm
 
-from main.environment import GrowthNN
+from estimates.estimate_growth import GrowthNN
 
 
 class ActorCriticNetwork(nn.Module):

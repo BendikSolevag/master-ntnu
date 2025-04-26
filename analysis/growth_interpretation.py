@@ -3,28 +3,8 @@ from torch import nn
 import matplotlib.pyplot as plt
 import numpy as np
 
-class GrowthNN(nn.Module):
-    def __init__(self, input_size):
-        super(GrowthNN, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(input_size, 64),
-            nn.ReLU(),
-            nn.Linear(64, 128),
-            nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1),
-        )
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)
-    
+from estimates.estimate_growth import GrowthNN
+
 
 
 TARGET_GROWTH = 8.0

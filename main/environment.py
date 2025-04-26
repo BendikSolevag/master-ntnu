@@ -2,31 +2,13 @@ import numpy as np
 import torch
 from torch import nn
 
+from estimates.estimate_growth import GrowthNN
+
 # Seasonal mean function
 def theta(t, a, b, phi):
     return a + b * np.sin(2.0 * np.pi * (t / 52.0) + phi)
 
-class GrowthNN(nn.Module):
-    def __init__(self, input_size):
-        super(GrowthNN, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(input_size, 64),
-            nn.ReLU(),
-            nn.Linear(64, 128),
-            nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1),
-        )
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)
+
 
 
 class SalmonFarmEnv:
@@ -239,6 +221,7 @@ class SalmonFarmEnv:
             harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE
             reward += harvest_revenue
             reward -= self.cost_harvest
+            reward -= 1.3e8
             self.total_cost_harvest += self.cost_harvest
             #self.GROWTH_OPEN = 0
             #self.NUMBER_OPEN = 0
