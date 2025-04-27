@@ -121,7 +121,7 @@ class TEnv:
         if self.OPEN:
           self.resolve_treating()
           self.resolve_mortality()
-        self.PRICE = 100 + np.random.normal()
+        self.PRICE = 100 + 10 * np.random.normal()
         
         return reward, self.DONE
 
