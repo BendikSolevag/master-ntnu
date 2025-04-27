@@ -15,6 +15,8 @@ class TEnv:
         self.PRICE = 100
         self.NUMBER = 1000
         self.LICE = 0.1
+        self.OPEN = False
+        self.TREATING = False
 
         self.LICE_TREAT_THRESHOLD = 0.5
         # Utility variables
@@ -63,7 +65,7 @@ class TEnv:
         self.sliding_window_lice.pop(0)
         self.sliding_window_lice.append(self.LICE)
         window_exceeds = [True if x > self.LICE_TREAT_THRESHOLD else False for x in self.sliding_window_lice]
-        self.TREATING = 1.0 if any(window_exceeds) else 0.0
+        self.TREATING = True if any(window_exceeds) else False
 
     def resolve_mortality(self):
         # Population loss due to treatment
@@ -87,19 +89,34 @@ class TEnv:
       self.state *= np.exp(g_rate)
 
     def get_state(self):
-        return [self.state]
+        return [self.state, np.log(self.NUMBER), self.TREATING, self.LICE]
 
     def step(self, action: int):
         reward = -0.01 * self.NUMBER
-        self.AGE += 1/52
+        if not self.OPEN:
+          reward -= 0.01 * self.NUMBER
+        if self.TREATING:
+           reward -= 0.05 * self.NUMBER
+           
+        # Actions
         if action == 1:
             reward += self.state * self.NUMBER
             reward -= 7 * self.NUMBER
             self.DONE = True
+        if action == 2:
+           self.OPEN = True
+        
+        # State vars
+        self.AGE += 1/52
+
+        if not self.TREATING:
+          self.resolve_growth()
+        
         self.resolve_lice()
-        self.resolve_treating()
-        self.resolve_mortality()
-        self.resolve_growth()
+        if self.OPEN:
+          self.resolve_treating()
+          self.resolve_mortality()
+        
         return reward, self.DONE
 
 
@@ -107,19 +124,22 @@ def main():
   env   = TEnv()
   obs   = env.get_state()
 
-  agent = Agent(lr=1e-3,
+  agent = Agent(lr=1e-4,
                 input_dims=[len(obs)],
-                n_actions=2,
-                fc1_dims=16, fc2_dims=16,
+                n_actions=3,
+                fc1_dims=64, fc2_dims=64,
                 gamma=0.99,
                 n_step=200)
 
   episode_lengths = []
-
+  move_timesteps = []
+  
   for ep in tqdm(range(2500)):
     env = TEnv()
     state = env.get_state()
     timesteps = 0
+    move_timestep = 0
+
 
     while True:
       action = agent.choose_action(state)
@@ -127,6 +147,8 @@ def main():
       # safety stop: force terminate after 20 steps
       if timesteps > 160:
         action = 1
+      if action == 2 and move_timestep == 0:
+         move_timestep = timesteps
 
       reward, done = env.step(action)
       reward = reward / 1000
@@ -140,9 +162,9 @@ def main():
 
       state = next_state
       timesteps += 1
-
+    move_timesteps.append(move_timestep)
     episode_lengths.append(timesteps)
-  return episode_lengths
+  return episode_lengths, move_timesteps
 
 
 def visualize_env():
@@ -164,8 +186,10 @@ if __name__ == "__main__":
   fig, ax = plt.subplots(2, 1)
   
   trews = visualize_env()
-  lens = main()
-
   ax[0].plot(trews)
+  
+  lens, move_timesteps = main()
   ax[1].plot(lens)
+  ax[1].plot(move_timesteps, color="pink", alpha=0.5)
+
   plt.show()
