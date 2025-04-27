@@ -1,3 +1,10 @@
+"""
+
+The main episodic version of the algorithm struggles to converge as the reward signal is affected by the scale. 
+
+"""
+
+
 from matplotlib import pyplot as plt
 import numpy as np
 import torch as T
@@ -96,10 +103,10 @@ class TEnv:
       return
     explanatory = [
       round(self.AGE), #generation_approx_age, 
-      self.GROWTH_OPEN * 0.015 * 30, #feedamountperfish, 
+      self.GROWTH_OPEN * 0.015 * 30, #feedamountperfish
       self.GROWTH_OPEN, #mean_size,
       self.LICE, #mean_voksne_hunnlus,
-    ] 
+    ]
     pred = self.growth_model.forward(T.tensor(explanatory, dtype=T.float32)).item()  
     # Cap prediction within reasonable range
     pred = max(min(pred, 8), 0.1)
