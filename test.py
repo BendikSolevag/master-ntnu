@@ -92,16 +92,18 @@ class TEnv:
         return [self.state, np.log(self.NUMBER), self.TREATING, self.LICE]
 
     def step(self, action: int):
-        reward = -0.01 * self.NUMBER
+        
+        reward = -0.01 * self.NUMBER * self.PRICE
         if not self.OPEN:
-          reward -= 0.01 * self.NUMBER
+          reward -= 0.01 * self.NUMBER * self.PRICE
         if self.TREATING:
-           reward -= 0.05 * self.NUMBER
+           reward -= 0.05 * self.NUMBER * self.PRICE
            
         # Actions
         if action == 1:
-            reward += self.state * self.NUMBER
-            reward -= 7 * self.NUMBER
+            
+            reward += self.state * self.NUMBER * self.PRICE
+            reward -= 7 * self.NUMBER * self.PRICE
             self.DONE = True
         if action == 2:
            self.OPEN = True
@@ -116,6 +118,7 @@ class TEnv:
         if self.OPEN:
           self.resolve_treating()
           self.resolve_mortality()
+        self.PRICE = 100 + np.random.normal()
         
         return reward, self.DONE
 
@@ -151,7 +154,7 @@ def main():
          move_timestep = timesteps
 
       reward, done = env.step(action)
-      reward = reward / 1000
+      reward = reward / (1000 * 100)
             
       next_state = env.get_state()
 
