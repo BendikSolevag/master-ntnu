@@ -1,6 +1,4 @@
-import numpy as np
 import matplotlib.pyplot as plt
-import time
 from tqdm import tqdm
 import torch as T
 from environment import SalmonFarmEnv
@@ -10,13 +8,10 @@ from agents.n_step_actor_critic import Agent
 
 
 
-
-
 def main():
     # The reinforce with baseline version is the most stable algorithm, but the problem is moreso with the design of the reward function. A 'least negative' reward signal works better than a 'most positive'. Why is this?
     env = SalmonFarmEnv(infinite=False)
     state = T.tensor(env.get_state(), dtype=T.float32)
-    
     
     agent = Agent(lr=0.001, input_dims=[len(state)], n_actions=4)
     
@@ -79,7 +74,7 @@ def main():
     ax[0].plot(termtimesteps)
     ax[1].plot(totalrewards)
     
-    
+
     plt.show()
 
 

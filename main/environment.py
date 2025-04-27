@@ -224,16 +224,16 @@ class SalmonFarmEnv:
             #self.AGE_OPEN = 0
             self.DONE = 1
 
-            # If infinite, immediately plant new generation
-            if self.infinite:
-                self.NUMBER_CLOSED = self.N_ZERO
-                self.GROWTH_CLOSED = self.G_ZERO
-                self.AGE_CLOSED = 0
-                #reward -= self.cost_plant * self.N_ZERO
-            
-            else:
+            if not self.infinite:
                 return reward, self.DONE
-            
+
+            # If infinite, immediately plant new generation
+            self.NUMBER_CLOSED = self.N_ZERO
+            self.GROWTH_CLOSED = self.G_ZERO
+            self.AGE_CLOSED = 0
+            #reward -= self.cost_plant * self.N_ZERO
+
+
 
         # Update state variables
         self.resolve_lice()
