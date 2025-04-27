@@ -5,13 +5,12 @@ from torch import nn
 from torch import optim
 
 class ActorCriticNetwork(nn.Module):
-    def __init__(self, lr, input_dims, n_actions, fc1_dims=64, fc2_dims=64):
+    def __init__(self, lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256):
         super().__init__()
         self.fc1 = nn.Linear(*input_dims, fc1_dims)
         self.fc2 = nn.Linear(fc1_dims, fc2_dims)
         self.pi  = nn.Linear(fc2_dims, n_actions)
         self.v   = nn.Linear(fc2_dims, 1)
-
         self.optimizer = optim.Adam(self.parameters(), lr=lr)
         self.device    = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
         self.to(self.device)
@@ -22,7 +21,7 @@ class ActorCriticNetwork(nn.Module):
         return self.pi(x), self.v(x)
 
 class Agent:
-    def __init__(self, lr, input_dims, n_actions, fc1_dims=64, fc2_dims=64, gamma=0.99, n_step=200):
+    def __init__(self, lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256, gamma=0.99, n_step=200):
         self.gamma = gamma
         self.n_step = n_step
         self.net = ActorCriticNetwork(lr, input_dims, n_actions, fc1_dims, fc2_dims)

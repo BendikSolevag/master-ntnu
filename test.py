@@ -13,7 +13,8 @@ class TEnv:
         self.DONE  = False
         self.AGE = 0
         self.PRICE = 100
-        self.NUMBER = 1000
+        self.NUMBER_CLOSED = 1000
+        self.NUMBER_OPEN = 0
         self.LICE = 0.1
         self.OPEN = False
         self.TREATING = False
@@ -69,9 +70,10 @@ class TEnv:
 
     def resolve_mortality(self):
         # Population loss due to treatment
-        if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
-            mr = self.resolve_mortalityrate()
-            self.NUMBER = self.NUMBER - mr * self.NUMBER
+        if self.NUMBER_OPEN > 0:
+          if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
+              mr = self.resolve_mortalityrate()
+              self.NUMBER_OPEN = self.NUMBER_OPEN - mr * self.NUMBER_OPEN
 
 
     def resolve_growth(self):
@@ -79,7 +81,7 @@ class TEnv:
           round(self.AGE), #generation_approx_age, 
           self.state * 0.015 * 30, #feedamountperfish, 
           self.state, #mean_size,
-          self.LICE, #mean_voksne_hunnlus,
+          self.LICE if self.OPEN else 0, #mean_voksne_hunnlus,
       ]
       pred = self.growth_model.forward(T.tensor(explanatory, dtype=T.float32)).item()  
       # Cap prediction within reasonable range
@@ -89,24 +91,25 @@ class TEnv:
       self.state *= np.exp(g_rate)
 
     def get_state(self):
-        return [self.state, np.log(self.NUMBER), self.TREATING, self.LICE]
+        return [self.state, np.log(self.NUMBER_CLOSED + 1), np.log(self.NUMBER_OPEN + 1), self.TREATING, self.LICE, np.log(self.PRICE)]
 
     def step(self, action: int):
         
-        reward = -0.01 * self.NUMBER * self.PRICE
+        reward = -0.01 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * self.PRICE
         if not self.OPEN:
-          reward -= 0.01 * self.NUMBER * self.PRICE
+          reward -= 0.01 * self.NUMBER_CLOSED * self.PRICE
         if self.TREATING:
-           reward -= 0.05 * self.NUMBER * self.PRICE
+          reward -= 0.01 * self.NUMBER_OPEN * self.PRICE
            
         # Actions
         if action == 1:
-            
-            reward += self.state * self.NUMBER * self.PRICE
-            reward -= 7 * self.NUMBER * self.PRICE
-            self.DONE = True
+          reward += self.state * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * self.PRICE
+          reward -= 7 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * self.PRICE
+          self.DONE = True
         if action == 2:
-           self.OPEN = True
+          self.OPEN = True
+          self.NUMBER_OPEN = self.NUMBER_CLOSED
+          self.NUMBER_CLOSED = 0
         
         # State vars
         self.AGE += 1/52
@@ -130,7 +133,7 @@ def main():
   agent = Agent(lr=1e-4,
                 input_dims=[len(obs)],
                 n_actions=3,
-                fc1_dims=64, fc2_dims=64,
+                fc1_dims=128, fc2_dims=128,
                 gamma=0.99,
                 n_step=200)
 
@@ -138,6 +141,10 @@ def main():
   move_timesteps = []
   
   for ep in tqdm(range(2500)):
+    epsilon = np.random.uniform(0, 1)
+    htstep = np.random.randint(60, 110)
+    mtstep = np.random.randint(1, 59)
+    
     env = TEnv()
     state = env.get_state()
     timesteps = 0
@@ -146,6 +153,13 @@ def main():
 
     while True:
       action = agent.choose_action(state)
+      # If explore epoch, force random action 
+      if epsilon < 0.1:
+        action = 0
+        if timesteps == mtstep:
+           action = 2
+        if timesteps == htstep:
+           action = 1         
 
       # safety stop: force terminate after 20 steps
       if timesteps > 160:
