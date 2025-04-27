@@ -13,19 +13,71 @@ class TEnv:
         self.DONE  = False
         self.AGE = 0
         self.PRICE = 100
+        self.NUMBER = 1000
+        self.LICE = 0.1
+
+        self.LICE_TREAT_THRESHOLD = 0.5
+        # Utility variables
+        self.sliding_window_max = round((2/52)/(1/52))
+        self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
         
         # Growth rate NN
         self.growth_model = GrowthNN(input_size=4)
         self.growth_model.load_state_dict(T.load('./models/growth/1743671011.288821-model.pt', weights_only=True))
         self.growth_model.eval()
-        
 
-    def resolve_growth_open(self):
+
+
+
+    def resolve_mortalityrate(self) -> float:
+        categorydraw = np.random.uniform()
+        if categorydraw >= 0.999**2:
+            # gt 50% mortality
+            return np.random.uniform(0.5, 0.9)
+        if categorydraw >= 0.995**2:
+            # gt 25% mortality
+            return np.random.uniform(0.25, 0.5)
+        if categorydraw >= 0.989**2:
+            # gt 10% mortality
+            return np.random.uniform(0.1, 0.25)
+        if categorydraw >= 0.975*0.968:
+            # gt 5% mortality
+            return np.random.uniform(0.05, 0.1)
+        if categorydraw >= 0.948*0.937:
+            # gt 2.5% mortality
+            return np.random.uniform(0.025, 0.05)
+        if categorydraw >= 0.894*0.853:
+            # gt 1% mortality
+            return np.random.uniform(0.01, 0.025)
+        return 0.0
+
+
+    def resolve_lice(self):
+        self.lice_kappa, self.lice_a, self.lice_b, self.lice_phi, self.lice_sigma, self.lice_t = 0.56451781,  0.17984971,  0.05243226, -0.62917791, 0.25959416, 0
+        def theta(t, a, b, phi):
+          return a + b * np.sin(2.0 * np.pi * (t / 52.0) + phi)
+        seasonal_mean = theta(self.lice_t, self.lice_a, self.lice_b, self.lice_phi)
+        self.LICE = (1 - self.lice_kappa) * self.LICE + self.lice_kappa * seasonal_mean + np.random.normal(0, self.lice_sigma)**2
+    
+    def resolve_treating(self):
+        self.sliding_window_lice.pop(0)
+        self.sliding_window_lice.append(self.LICE)
+        window_exceeds = [True if x > self.LICE_TREAT_THRESHOLD else False for x in self.sliding_window_lice]
+        self.TREATING = 1.0 if any(window_exceeds) else 0.0
+
+    def resolve_mortality(self):
+        # Population loss due to treatment
+        if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
+            mr = self.resolve_mortalityrate()
+            self.NUMBER = self.NUMBER - mr * self.NUMBER
+
+
+    def resolve_growth(self):
       explanatory = [
           round(self.AGE), #generation_approx_age, 
           self.state * 0.015 * 30, #feedamountperfish, 
           self.state, #mean_size,
-          0.25, #mean_voksne_hunnlus,
+          self.LICE, #mean_voksne_hunnlus,
       ]
       pred = self.growth_model.forward(T.tensor(explanatory, dtype=T.float32)).item()  
       # Cap prediction within reasonable range
@@ -38,29 +90,17 @@ class TEnv:
         return [self.state]
 
     def step(self, action: int):
-        reward = -0.01
+        reward = -0.01 * self.NUMBER
         self.AGE += 1/52
         if action == 1:
-            reward += self.state
-            reward -= 7
+            reward += self.state * self.NUMBER
+            reward -= 7 * self.NUMBER
             self.DONE = True
-        self.resolve_growth_open()
+        self.resolve_lice()
+        self.resolve_treating()
+        self.resolve_mortality()
+        self.resolve_growth()
         return reward, self.DONE
-
-
-def visualize_env():
-  trews = []
-  for i in range(120):
-    env = TEnv()
-    trew = 0
-    for j in range(i):
-      rew, done = env.step(0)
-      trew += rew
-    rew, done = env.step(1)
-
-    trew += rew
-    trews.append(trew)
-  return trews
 
 
 def main():
@@ -76,7 +116,7 @@ def main():
 
   episode_lengths = []
 
-  for ep in tqdm(range(1000)):
+  for ep in tqdm(range(2500)):
     env = TEnv()
     state = env.get_state()
     timesteps = 0
@@ -85,12 +125,12 @@ def main():
       action = agent.choose_action(state)
 
       # safety stop: force terminate after 20 steps
-      if timesteps > 200:
+      if timesteps > 160:
         action = 1
 
       reward, done = env.step(action)
-      
-      
+      reward = reward / 1000
+            
       next_state = env.get_state()
 
       agent.learn(state, action, reward, next_state, done)
@@ -105,7 +145,19 @@ def main():
   return episode_lengths
 
 
+def visualize_env():
+  trews = []
+  for i in range(120):
+    env = TEnv()
+    trew = 0
+    for j in range(i):
+      rew, done = env.step(0)
+      trew += rew
+    rew, done = env.step(1)
 
+    trew += rew
+    trews.append(trew)
+  return trews
 
 if __name__ == "__main__":
 
