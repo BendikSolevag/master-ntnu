@@ -142,7 +142,8 @@ class TEnv:
     if self.OPEN:
       self.resolve_treating()
       self.resolve_mortality()
-    self.PRICE = 100 + 10 * np.random.normal()
+
+    self.PRICE = 100 + (np.random.beta(0.5, 0.5) - 0.5) * 60
     
     return reward, self.DONE
 
@@ -226,13 +227,13 @@ def visualize_env():
 
 if __name__ == "__main__":
 
-  #fig, ax = plt.subplots(2, 1)
+  fig, ax = plt.subplots(2, 1)
   
   trews = visualize_env()
-  plt.plot(trews)
-  #ax[0].plot(trews)
-  #lens, move_timesteps = main()
-  #ax[1].plot(lens)
-  #ax[1].plot(move_timesteps, color="pink", alpha=0.5)
+  ax[0].plot(trews)
+
+  lens, move_timesteps = main()
+  ax[1].plot(lens)
+  ax[1].plot(move_timesteps, color="pink", alpha=0.5)
 
   plt.show()
