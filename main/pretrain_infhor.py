@@ -10,8 +10,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 import torch as T
 from tqdm import tqdm
+from agents.n_step_actor_critic_infinite import Agent
 from util.growthmodel import GrowthNN
-from agents.n_step_actor_critic import Agent
 
 
 
@@ -20,12 +20,12 @@ class TEnv:
     self.GROWTH_CLOSED = 0.2
     self.GROWTH_OPEN = 0.0
     self.DONE  = False
-    self.AGE = 0
+    self.AGE_CLOSED = 0
+    self.AGE_OPEN = 0
     self.PRICE = 100
     self.NUMBER_CLOSED = 1000
     self.NUMBER_OPEN = 0
     self.LICE = 0.1
-    self.OPEN = False
     self.TREATING = False
 
     self.LICE_TREAT_THRESHOLD = 0.5
@@ -87,7 +87,7 @@ class TEnv:
     if self.NUMBER_CLOSED <= 0:
       return
     explanatory = [
-      round(self.AGE), #generation_approx_age, 
+      round(self.AGE_CLOSED), #generation_approx_age, 
       self.GROWTH_CLOSED * 0.015 * 30, #feedamountperfish, 
       self.GROWTH_CLOSED, #mean_size,
       0, #mean_voksne_hunnlus, 0 as the system is closed
@@ -103,7 +103,7 @@ class TEnv:
     if self.NUMBER_OPEN <= 0 or self.TREATING:
       return
     explanatory = [
-      round(self.AGE), #generation_approx_age, 
+      round(self.AGE_OPEN), #generation_approx_age, 
       self.GROWTH_OPEN * 0.015 * 30, #feedamountperfish
       self.GROWTH_OPEN, #mean_size,
       self.LICE, #mean_voksne_hunnlus,
@@ -121,34 +121,44 @@ class TEnv:
 
   def step(self, action: int):
     reward = -0.01 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * self.PRICE
-    if not self.OPEN:
+    self.TREATING = False
+    if self.NUMBER_CLOSED > 0:
       reward -= 0.01 * self.NUMBER_CLOSED * self.PRICE
-    if self.TREATING:
-      reward -= 0.01 * self.NUMBER_OPEN * self.PRICE
+    
         
     # Actions
     if action == 1:
       reward +=  self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE
       reward -= 7 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * self.PRICE
-      self.DONE = True
+
 
     if action == 2:
-      self.OPEN = True
       self.NUMBER_OPEN = self.NUMBER_CLOSED
       self.NUMBER_CLOSED = 0
       self.GROWTH_OPEN = self.GROWTH_CLOSED
       self.GROWTH_CLOSED = 0
-    
-    # State vars
-    self.AGE += 1/52
+      self.AGE_OPEN = self.AGE_CLOSED
+      self.AGE_CLOSED = 0
 
-    self.resolve_growth_closed()
-    if not self.TREATING:
+    if action == 3:
+      self.NUMBER_CLOSED = 1000
+      self.GROWTH_CLOSED = 0.2
+      self.AGE_CLOSED = 0
+
+    # State vars
+    self.AGE_OPEN += 1/52
+    self.AGE_CLOSED += 1/52
+
+    if self.NUMBER_CLOSED > 0:
+      self.resolve_growth_closed()
+    if self.NUMBER_OPEN > 0 and not self.TREATING:
       self.resolve_growth_open()
     
     self.resolve_lice()
-    if self.OPEN:
+    if self.NUMBER_OPEN > 0:
       self.resolve_treating()
+      if self.TREATING:
+        reward -= 0.01 * self.NUMBER_OPEN * self.PRICE
       self.resolve_mortality()
 
     self.PRICE = 100 + (np.random.beta(0.5, 0.5) - 0.5) * 60
@@ -163,85 +173,54 @@ def main():
   agent = Agent(
     lr=1e-4,
     input_dims=[len(obs)],
-    n_actions=3,
+    n_actions=4,
     fc1_dims=128, fc2_dims=128,
     gamma=0.99,
     n_step=200
   )
 
+  r_bars = []
+
   episode_lengths = []
-  move_timesteps = []
+  harvest_ctr = 0
   
-  for ep in tqdm(range(2500)):
-    epsilon = np.random.uniform(0, 1)
-    htstep = np.random.randint(60, 110)
-    mtstep = np.random.randint(1, 59)
-    
-    env = TEnv()
-    state = env.get_state()
-    timesteps = 0
-    move_timestep = 0
+  env = TEnv()
+  state = env.get_state()
+
+  for ep in tqdm(range(100000)):
+    if (ep % 100) == 0:
+      r_bars.append(agent.R_BAR.item())
+  
+    action = agent.choose_action(state)
+
+    # safety stop: force terminate after 160 steps
+    if harvest_ctr > 160:
+      action = 1
+
+    if action == 1:
+      episode_lengths.append(harvest_ctr)
+      harvest_ctr = 0
+
+    reward, done = env.step(action)
+    reward = reward / (1000 * 100)
+          
+    next_state = env.get_state()
+
+    agent.learn(state, action, reward, next_state)
+
+    state = next_state
+    harvest_ctr += 1
+
+  return episode_lengths, r_bars
 
 
-    while True:
-      action = agent.choose_action(state)
-      # If explore epoch, force random action 
-      if epsilon < 0.1:
-        action = 0
-        if timesteps == mtstep:
-           action = 2
-        if timesteps == htstep:
-           action = 1         
-
-      # safety stop: force terminate after 20 steps
-      if timesteps > 160:
-        action = 1
-      if action == 2 and move_timestep == 0:
-         move_timestep = timesteps
-
-      reward, done = env.step(action)
-      reward = reward / (1000 * 100)
-            
-      next_state = env.get_state()
-
-      agent.learn(state, action, reward, next_state, done)
-
-      if done:
-        break
-
-      state = next_state
-      timesteps += 1
-    move_timesteps.append(move_timestep)
-    episode_lengths.append(timesteps)
-  return episode_lengths, move_timesteps
-
-
-def visualize_env():
-  trews = []
-  for i in range(10, 120):
-    env = TEnv()
-    trew = 0
-    for j in range(i):
-      action = 0
-      if j == int(i / 2):
-        action = 2
-      rew, done = env.step(action)
-      trew += rew
-    rew, done = env.step(1)
-
-    trew += rew
-    trews.append(trew)
-  return trews
 
 if __name__ == "__main__":
 
   fig, ax = plt.subplots(2, 1)
-  
-  trews = visualize_env()
-  ax[0].plot(trews)
 
-  lens, move_timesteps = main()
-  ax[1].plot(lens)
-  ax[1].plot(move_timesteps, color="pink", alpha=0.5)
+  lens, rbars = main()
+  ax[0].plot(lens)
+  ax[1].plot(rbars)
 
   plt.show()
