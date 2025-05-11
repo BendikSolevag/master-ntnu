@@ -6,6 +6,7 @@ We therefore pretrain the model on this less noisy version of the algorithm
 """
 
 
+import time
 from matplotlib import pyplot as plt
 import numpy as np
 import torch as T
@@ -172,7 +173,8 @@ def main():
   episode_lengths = []
   move_timesteps = []
   
-  for ep in tqdm(range(2500)):
+  #for ep in tqdm(range(2500)):
+  for ep in tqdm(range(50000)):
     epsilon = np.random.uniform(0, 1)
     htstep = np.random.randint(60, 110)
     mtstep = np.random.randint(1, 59)
@@ -213,6 +215,7 @@ def main():
       timesteps += 1
     move_timesteps.append(move_timestep)
     episode_lengths.append(timesteps)
+  T.save(agent.net.state_dict(), f'./models/agent/episodic/{time.time()}-model.pt')
   return episode_lengths, move_timesteps
 
 

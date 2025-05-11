@@ -6,6 +6,7 @@ We therefore pretrain the model on this less noisy version of the algorithm
 """
 
 
+import time
 from matplotlib import pyplot as plt
 import numpy as np
 import torch as T
@@ -187,7 +188,7 @@ def main():
   env = TEnv()
   state = env.get_state()
 
-  for ep in tqdm(range(100000)):
+  for ep in tqdm(range(500000)):
     if (ep % 100) == 0:
       r_bars.append(agent.R_BAR.item())
   
@@ -211,6 +212,7 @@ def main():
     state = next_state
     harvest_ctr += 1
 
+  T.save(agent.net.state_dict(), f'./models/agent/infhor/{time.time()}-model.pt')
   return episode_lengths, r_bars
 
 
