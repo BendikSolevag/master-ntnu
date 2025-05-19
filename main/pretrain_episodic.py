@@ -2,8 +2,33 @@
 
 The main episodic version of the algorithm struggles to converge as the reward signal is affected by the scale. 
 We therefore pretrain the model on this less noisy version of the algorithm
+lossfunc = T.nn.L1Loss()
+for _ in tqdm(range(5000)):
+  open = 0 if np.random.uniform(0, 1) > 0.5 else 1
+  growth_closed = np.random.uniform(0.2, 8)
+  growth_open = np.random.uniform(0.2, 8)
+  number_closed = 1000
+  number_open = 1000
+
+  #[self.GROWTH_CLOSED, np.log(self.NUMBER_CLOSED + 1), self.GROWTH_OPEN, np.log(self.NUMBER_OPEN + 1), self.TREATING, self.LICE, np.log(self.PRICE)]
+  x = T.tensor([growth_closed * (1-open), np.log(number_closed * (1-open) + 1), growth_open * open, np.log(number_open * open) + 1, 0, 0.5, np.log(np.random.uniform(80, 120))], dtype=T.float32)
+  y = T.tensor([0.0, 0.0, 0.0], dtype=T.float32)
+  if growth_closed > 2:
+    y[2] = 1.0
+  if growth_open > 4.5:
+    y[1] = 1.0
+
+  pi, v = agent.net.forward(x)
+  print(pi)
+  print(y)
+  loss = lossfunc(y, pi)
+  loss.backward()
+  agent.net.optimizer.step()
+  agent.net.optimizer.zero_grad()
+  print(loss.item())
 
 """
+
 
 
 import time
@@ -13,8 +38,8 @@ import torch as T
 from tqdm import tqdm
 from util.growthmodel import GrowthNN
 from agents.n_step_actor_critic import Agent
-
-
+import seaborn as sns
+from environment import schwartz_two_factor_generator
 
 class TEnv:
   def __init__(self):
@@ -28,11 +53,12 @@ class TEnv:
     self.LICE = 0.1
     self.OPEN = False
     self.TREATING = False
+    
 
     self.LICE_TREAT_THRESHOLD = 0.5
     # Utility variables
-    self.sliding_window_max = round((2/52)/(1/52))
-    self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
+    self.PRICE_GENERATOR = schwartz_two_factor_generator(100, 0.01, 0.045, 0.01, 0.1, 0.05, 0.2, 0.2, 0.8, 1/52)
+    self.PRICE = 100 
     
     # Growth rate NN
     self.growth_model = GrowthNN(input_size=4)
@@ -121,16 +147,17 @@ class TEnv:
     return [self.GROWTH_CLOSED, np.log(self.NUMBER_CLOSED + 1), self.GROWTH_OPEN, np.log(self.NUMBER_OPEN + 1), self.TREATING, self.LICE, np.log(self.PRICE)]
 
   def step(self, action: int):
-    reward = -0.01 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * self.PRICE
+    reward = -1 * (self.NUMBER_CLOSED + self.NUMBER_OPEN)
     if not self.OPEN:
-      reward -= 0.01 * self.NUMBER_CLOSED * self.PRICE
+      reward -= self.NUMBER_CLOSED
     if self.TREATING:
-      reward -= 0.01 * self.NUMBER_OPEN * self.PRICE
+      reward -= self.NUMBER_OPEN
         
     # Actions
     if action == 1:
       reward +=  self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE
-      reward -= 7 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * self.PRICE
+      # TODO: Remove to obtain good reward signal
+      reward -= 7 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * 100
       self.DONE = True
 
     if action == 2:
@@ -152,7 +179,8 @@ class TEnv:
       self.resolve_treating()
       self.resolve_mortality()
 
-    self.PRICE = 100 + (np.random.beta(0.5, 0.5) - 0.5) * 60
+    #self.PRICE = 100 #+ (np.random.beta(0.5, 0.5) - 0.5) * 60
+    self.PRICE = next(self.PRICE_GENERATOR)
     
     return reward, self.DONE
 
@@ -174,38 +202,40 @@ def main():
   move_timesteps = []
   
   #for ep in tqdm(range(2500)):
-  for ep in tqdm(range(50000)):
-    epsilon = np.random.uniform(0, 1)
-    htstep = np.random.randint(60, 110)
-    mtstep = np.random.randint(1, 59)
+  for ep in tqdm(range(1000000)):
+    if ep > 0 and ep % 10000 == 0:
+      now = time.time()
+      T.save(agent.net_actor.state_dict(), f'./models/agent/episodic/{now}-actor-model.pt')
+      T.save(agent.net_critic.state_dict(), f'./models/agent/episodic/{now}-critic-model.pt')
+      
+    
+    htstep = np.random.randint(0, 140)
+    mtstep = np.random.randint(0, 140)
     
     env = TEnv()
     state = env.get_state()
     timesteps = 0
     move_timestep = 0
 
-
     while True:
       action = agent.choose_action(state)
-      # If explore epoch, force random action 
-      if epsilon < 0.1:
+      
+      if True:
         action = 0
         if timesteps == mtstep:
            action = 2
         if timesteps == htstep:
            action = 1         
 
-      # safety stop: force terminate after 20 steps
-      if timesteps > 160:
-        action = 1
-      if action == 2 and move_timestep == 0:
-         move_timestep = timesteps
+      
 
       reward, done = env.step(action)
       reward = reward / (1000 * 100)
-            
+      if env.GROWTH_CLOSED > 6 or env.GROWTH_OPEN > 6:
+        reward -= 1000000
+      
       next_state = env.get_state()
-
+      
       agent.learn(state, action, reward, next_state, done)
 
       if done:
@@ -213,9 +243,13 @@ def main():
 
       state = next_state
       timesteps += 1
+    if move_timestep == 0:
+      move_timestep = timesteps
     move_timesteps.append(move_timestep)
     episode_lengths.append(timesteps)
-  T.save(agent.net.state_dict(), f'./models/agent/episodic/{time.time()}-model.pt')
+  now = time.time()
+  T.save(agent.net_actor.state_dict(), f'./models/agent/episodic/{now}-actor-model.pt')
+  T.save(agent.net_critic.state_dict(), f'./models/agent/episodic/{now}-critic-model.pt')
   return episode_lengths, move_timesteps
 
 
@@ -238,13 +272,36 @@ def visualize_env():
 
 if __name__ == "__main__":
 
-  fig, ax = plt.subplots(2, 1)
-  
-  trews = visualize_env()
-  ax[0].plot(trews)
-
   lens, move_timesteps = main()
-  ax[1].plot(lens)
-  ax[1].plot(move_timesteps, color="pink", alpha=0.5)
+  print(len(lens))
+  print(len(move_timesteps))
+
+  lenmeans = []
+  movemeans = []
+
+  lmtmp = []
+  mvtmp = []
+  while len(lens) > 0:
+    if len(lmtmp) >= 50:
+      lenmeans.append(np.mean(lmtmp))
+      lmtmp = []
+      movemeans.append(np.mean(mvtmp))
+      mvtmp = []
+    lmtmp.append(lens.pop(0))
+    mvtmp.append(move_timesteps.pop(0))
+  
+  plt.plot(lenmeans)
+  plt.plot(movemeans)
+
+
+  #fig, ax = plt.subplots(2, 1)
+  #trews = visualize_env()
+  #ax[0].plot(trews)
+  #ax[1].plot(lens)
+  #ax[1].plot(move_timesteps, color="pink", alpha=0.5)
+
+
+
+
 
   plt.show()

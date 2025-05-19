@@ -96,8 +96,11 @@ class SalmonFarmEnv:
         self.total_cost_operation = 0
         self.total_cost_treatment = 0
 
+    #def get_state(self):
+    #    return [self.PRICE, self.LICE, self.GROWTH_CLOSED, self.NUMBER_CLOSED, self.GROWTH_OPEN, self.NUMBER_OPEN, self.TREATING]
+
     def get_state(self):
-        return [self.PRICE, self.LICE, self.GROWTH_CLOSED, self.NUMBER_CLOSED, self.GROWTH_OPEN, self.NUMBER_OPEN, self.TREATING]
+        return [self.GROWTH_CLOSED, np.log(self.NUMBER_CLOSED + 1), self.GROWTH_OPEN, np.log(self.NUMBER_OPEN + 1), self.TREATING, self.LICE, np.log(self.PRICE)]
 
     def resolve_mortalityrate(self) -> float:
         categorydraw = np.random.uniform()
