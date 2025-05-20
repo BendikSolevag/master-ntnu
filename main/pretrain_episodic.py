@@ -243,7 +243,7 @@ def main():
       if action == 2 and timesteps > 10 and timesteps < 40 and move_timestep == 0:
         reward *= 0.5
       if action == 1:
-        if timesteps > 70 and timesteps < 90:
+        if timesteps > 60 and timesteps < 90:
           reward += 1e5
       
       next_state = env.get_state()

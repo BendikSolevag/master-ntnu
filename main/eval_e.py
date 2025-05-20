@@ -25,8 +25,8 @@ def main():
         n_step=200
     )
 
-    agent.net_actor.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-actor-model-20000.pt", weights_only=True))
-    agent.net_critic.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-critic-model-20000.pt", weights_only=True))
+    agent.net_actor.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-actor-model-30000.pt", weights_only=True))
+    agent.net_critic.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-critic-model-30000.pt", weights_only=True))
     
     agent.net_actor.eval()
     agent.net_critic.eval()
