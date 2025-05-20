@@ -49,7 +49,8 @@ class Agent:
         dist  = T.distributions.Categorical(probs)
         action = dist.sample().item()
         return action
-
+        
+        
     def _flush_buffer(self, next_state, done):
         """
         Perform one gradient update for the *oldest* transition in the buffer

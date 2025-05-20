@@ -19,21 +19,21 @@ def main():
     agent = Agent(
         lr=1e-4,
         input_dims=[len(obs)],
-        n_actions=3,
+        n_actions=4,
         fc1_dims=128, fc2_dims=128,
         gamma=0.99,
         n_step=200
     )
 
-    agent.net_actor.load_state_dict(T.load("./models/agent/episodic/1747493103.23201-actor-model.pt", weights_only=True))
-    agent.net_critic.load_state_dict(T.load("./models/agent/episodic/1747493103.23201-critic-model.pt", weights_only=True))
+    agent.net_actor.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-actor-model-20000.pt", weights_only=True))
+    agent.net_critic.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-critic-model-20000.pt", weights_only=True))
     
     agent.net_actor.eval()
     agent.net_critic.eval()
     
     termtimesteps = []
     move_timesteps = []
-    for ep in tqdm(range(1000)):
+    for ep in tqdm(range(200)):
         total_reward = 0
         timesteps = 0
         env = TEnv()
@@ -46,24 +46,14 @@ def main():
         while True:
 
             action = agent.choose_action(state)
-            if timesteps < 30:
-                action = 0            
+            #if timesteps < 30:
+            #    action = 0            
                         
             reward, done = env.step(action)
 
-
-            o = T.tensor([state], dtype=T.float32).to(agent.net_actor.device)
-            logits = agent.net_actor(o)
-            probs = F.softmax(logits, dim=1)
-            
-            am = T.argmax(probs)
-            
-            action = am.item()
-
             if action == 2 and move_timestep == 0:
-            
                 move_timestep = timesteps
-                print('ep', ep, 'move timestep', move_timestep, 'action', action)
+                #print('ep', ep, 'move timestep', move_timestep, 'action', action)
 
             
             total_reward += reward
@@ -89,8 +79,10 @@ def main():
 
     fig, ax = plt.subplots(2, 1)
     ax[0].plot(termtimesteps, label="Harvest")
+    ax[0].legend()
     ax[1].plot(move_timesteps, label="Move")
-    plt.legend()
+    ax[1].legend()
+    
     plt.show()
 
 
