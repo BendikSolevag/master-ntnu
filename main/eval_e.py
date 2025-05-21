@@ -25,15 +25,19 @@ def main():
         n_step=200
     )
 
-    agent.net_actor.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-actor-model-30000.pt", weights_only=True))
-    agent.net_critic.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-critic-model-30000.pt", weights_only=True))
+    agent.net_actor.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-actor-model-50000.pt", weights_only=True))
+    agent.net_critic.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-critic-model-50000.pt", weights_only=True))
     
     agent.net_actor.eval()
     agent.net_critic.eval()
     
     termtimesteps = []
     move_timesteps = []
-    for ep in tqdm(range(200)):
+    total_rewards = []
+
+
+
+    for ep in tqdm(range(1000)):
         total_reward = 0
         timesteps = 0
         env = TEnv()
@@ -41,7 +45,7 @@ def main():
         
 
 
-        move_timestep = 0        
+        move_timestep = -1
         
         while True:
 
@@ -51,7 +55,7 @@ def main():
                         
             reward, done = env.step(action)
 
-            if action == 2 and move_timestep == 0:
+            if action == 2 and move_timestep == -1:
                 move_timestep = timesteps
                 #print('ep', ep, 'move timestep', move_timestep, 'action', action)
 
@@ -65,9 +69,6 @@ def main():
             if timesteps > 199:
                 break
 
-            
-
-
             timesteps += 1
             state = next_state
         
@@ -77,14 +78,22 @@ def main():
             move_timesteps.append(move_timestep)
         
 
-    fig, ax = plt.subplots(2, 1)
-    ax[0].plot(termtimesteps, label="Harvest")
-    ax[0].legend()
-    ax[1].plot(move_timesteps, label="Move")
-    ax[1].legend()
     
-    plt.show()
+        
+    
+    #plt.plot(termtimesteps, label="Harvest", color="blue")
+    #plt.plot(move_timesteps, label="Move", alpha=0.5, color="yellow")
+    #plt.legend()
+    #plt.show()
 
+    plt.boxplot([termtimesteps, move_timesteps],
+        labels=['Harvest decision', 'Move decision'],
+        showfliers=False
+        )
+    plt.ylabel("Timestep (weeks after planting)")
+    plt.savefig('./illustrations/results/episodic/optimal-move-harvest-boxplot.png', format="png", dpi=400)
+
+    plt.close()
 
 if __name__ == '__main__':
     main()

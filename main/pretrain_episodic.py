@@ -158,6 +158,7 @@ class TEnv:
       # TODO: Remove to obtain good reward signal
       reward -= 7 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * 100
       self.DONE = True
+      return reward, self.DONE
 
     if action == 2:
       self.OPEN = True
