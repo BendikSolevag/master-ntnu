@@ -35,7 +35,7 @@ class CriticNetwork(nn.Module):
         return self.v(x)
 
 class Agent:
-    def __init__(self, lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256, gamma=0.99, n_step=200):
+    def __init__(self, lr, input_dims, n_actions, fc1_dims=256, fc2_dims=256, gamma=0.999135, n_step=200):
         self.gamma = gamma
         self.n_step = n_step
         self.net_actor = ActorNetwork(lr, input_dims, n_actions, fc1_dims, fc2_dims)

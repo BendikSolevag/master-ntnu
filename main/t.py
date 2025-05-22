@@ -1,16 +1,18 @@
 
-from pretrain_episodic import TEnv
+#from pretrain_episodic import TEnv
+from environment import SalmonFarmEnv
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
+import scipy.stats as stats
 
 
 main_total_rewards = []
 for mtstep in tqdm(range(69)):
   total_rewards = []
   for ep in range(200):
-    env = TEnv()
+    env = SalmonFarmEnv(infinite=False)
     timesteps = 0
     total_reward = 0
     while True:
@@ -33,11 +35,6 @@ for mtstep in tqdm(range(69)):
 
 
 
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-import scipy.stats as stats
-
 
 means = [np.mean(y) for y in main_total_rewards]
 cis = [stats.t.interval(0.95, len(y)-1, loc=np.mean(y), scale=stats.sem(y)) for y in main_total_rewards]
@@ -49,10 +46,11 @@ x_values = np.arange(len(main_total_rewards))
 
 plt.figure(figsize=(8, 6))
 sns.lineplot(x=x_values, y=means, label='Mean', color='blue')
-plt.fill_between(x_values, ci_lower, ci_upper, color='blue', alpha=0.2, label='95% CI')
+plt.fill_between(x_values, ci_lower, ci_upper, color='blue', alpha=0.2)
 
-plt.xlabel('X values')
-plt.ylabel('Mean and 95% CI')
-plt.title('Mean and 95% Confidence Interval')
-plt.legend()
-plt.show()
+
+plt.xlabel('Move Timestep')
+plt.yticks([])
+plt.ylabel('Reward')
+plt.savefig('./illustrations/analysis/reward-len-fixed-70.png', format="png")
+plt.close()

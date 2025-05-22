@@ -27,13 +27,12 @@ def main():
 
         growthlist_c = []
         growthlist_o = []
-        treatlist = []
 
         
         while True:
             growthlist_c.append(env.GROWTH_CLOSED)
             growthlist_o.append(env.GROWTH_OPEN)
-            treatlist.append(env.TREATING)
+            
             
 
 
@@ -48,6 +47,7 @@ def main():
 
             
             reward, done = env.step(action)
+            reward = reward / 1e7
             
             total_reward += reward
             next_state = env.get_state()
