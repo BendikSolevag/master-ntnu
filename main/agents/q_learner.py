@@ -31,12 +31,9 @@ class DeepQNetwork(nn.Module):
 
 
 class Agent:
-    def __init__(self, gamma, epsilon, lr, input_dims, batch_size, n_actions,
-                 max_mem_size=100000, eps_end=0.05, eps_dec=5e-4):
+    def __init__(self, gamma, lr, input_dims, batch_size, n_actions,
+                 max_mem_size=100000):
         self.gamma = gamma
-        self.epsilon = epsilon
-        self.eps_min = eps_end
-        self.eps_dec = eps_dec
         self.lr = lr
         self.action_space = [i for i in range(n_actions)]
         self.mem_size = max_mem_size
@@ -47,14 +44,14 @@ class Agent:
 
         self.Q_eval = DeepQNetwork(lr, n_actions=n_actions,
                                    input_dims=input_dims,
-                                   fc1_dims=256, fc2_dims=256)
+                                   fc1_dims=64, fc2_dims=64)
         self.state_memory = np.zeros((self.mem_size, *input_dims),
                                      dtype=np.float32)
         self.new_state_memory = np.zeros((self.mem_size, *input_dims),
                                          dtype=np.float32)
         self.action_memory = np.zeros(self.mem_size, dtype=np.int32)
         self.reward_memory = np.zeros(self.mem_size, dtype=np.float32)
-        self.terminal_memory = np.zeros(self.mem_size, dtype=np.bool)
+        self.terminal_memory = np.zeros(self.mem_size, dtype=np.bool_)
 
     def store_transition(self, state, action, reward, state_, terminal):
         index = self.mem_cntr % self.mem_size
@@ -67,13 +64,9 @@ class Agent:
         self.mem_cntr += 1
 
     def choose_action(self, observation):
-        if np.random.random() > self.epsilon:
-            state = T.tensor([observation]).to(self.Q_eval.device)
-            actions = self.Q_eval.forward(state)
-            action = T.argmax(actions).item()
-        else:
-            action = np.random.choice(self.action_space)
-
+        state = T.tensor([observation], dtype=T.float).to(self.Q_eval.device)
+        actions = self.Q_eval.forward(state)
+        action = T.argmax(actions).item()
         return action
 
     def learn(self):
@@ -107,4 +100,3 @@ class Agent:
         self.Q_eval.optimizer.step()
 
         self.iter_cntr += 1
-        self.epsilon = self.epsilon - self.eps_dec if self.epsilon > self.eps_min else self.eps_min
