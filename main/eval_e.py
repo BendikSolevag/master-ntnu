@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import torch as T
-
+import time
 from tqdm import tqdm
 import numpy as np
 from agents.n_step_actor_critic import Agent
@@ -25,8 +25,8 @@ def main():
         n_step=200
     )
 
-    agent.net_actor.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-actor-model-50000.pt", weights_only=True))
-    agent.net_critic.load_state_dict(T.load("./models/agent/episodic/1747726111.0649228-critic-model-50000.pt", weights_only=True))
+    agent.net_actor.load_state_dict(T.load("./models/agent/episodic/1747833146.512338-actor-model-10000.pt", weights_only=True))
+    agent.net_critic.load_state_dict(T.load("./models/agent/episodic/1747833146.512338-critic-model-10000.pt", weights_only=True))
     
     agent.net_actor.eval()
     agent.net_critic.eval()
@@ -42,18 +42,17 @@ def main():
         timesteps = 0
         env = TEnv()
         state = env.get_state()
-        
-
 
         move_timestep = -1
         
         while True:
 
             action = agent.choose_action(state)
+            
             #if timesteps < 30:
-            #    action = 0            
-                        
+            #    action = 0                        
             reward, done = env.step(action)
+            
 
             if action == 2 and move_timestep == -1:
                 move_timestep = timesteps
@@ -76,22 +75,25 @@ def main():
             termtimesteps.append(timesteps)
         if move_timestep > 0:
             move_timesteps.append(move_timestep)
+    
+
         
 
-    
-        
-    
     #plt.plot(termtimesteps, label="Harvest", color="blue")
     #plt.plot(move_timesteps, label="Move", alpha=0.5, color="yellow")
     #plt.legend()
     #plt.show()
+    print('len(termtimesteps)',len(termtimesteps))
+    print('len(move_timesteps)',len(move_timesteps))
 
     plt.boxplot([termtimesteps, move_timesteps],
         labels=['Harvest decision', 'Move decision'],
         showfliers=False
         )
     plt.ylabel("Timestep (weeks after planting)")
-    plt.savefig('./illustrations/results/episodic/optimal-move-harvest-boxplot.png', format="png", dpi=400)
+    now = time.time()
+    #plt.savefig(f'./illustrations/results/episodic/{now}-optimal-move-harvest-boxplot.png', format="png", dpi=400)
+    plt.show()
 
     plt.close()
 

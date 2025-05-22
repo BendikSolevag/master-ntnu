@@ -1,35 +1,7 @@
 """
-
 The main episodic version of the algorithm struggles to converge as the reward signal is affected by the scale. 
 We therefore pretrain the model on this less noisy version of the algorithm
-lossfunc = T.nn.L1Loss()
-for _ in tqdm(range(5000)):
-  open = 0 if np.random.uniform(0, 1) > 0.5 else 1
-  growth_closed = np.random.uniform(0.2, 8)
-  growth_open = np.random.uniform(0.2, 8)
-  number_closed = 1000
-  number_open = 1000
-
-  #[self.GROWTH_CLOSED, np.log(self.NUMBER_CLOSED + 1), self.GROWTH_OPEN, np.log(self.NUMBER_OPEN + 1), self.TREATING, self.LICE, np.log(self.PRICE)]
-  x = T.tensor([growth_closed * (1-open), np.log(number_closed * (1-open) + 1), growth_open * open, np.log(number_open * open) + 1, 0, 0.5, np.log(np.random.uniform(80, 120))], dtype=T.float32)
-  y = T.tensor([0.0, 0.0, 0.0], dtype=T.float32)
-  if growth_closed > 2:
-    y[2] = 1.0
-  if growth_open > 4.5:
-    y[1] = 1.0
-
-  pi, v = agent.net.forward(x)
-  print(pi)
-  print(y)
-  loss = lossfunc(y, pi)
-  loss.backward()
-  agent.net.optimizer.step()
-  agent.net.optimizer.zero_grad()
-  print(loss.item())
-
 """
-
-
 
 import math
 import time
@@ -53,6 +25,8 @@ class TEnv:
     self.NUMBER_OPEN = 0
     self.LICE = 0.1
     self.OPEN = False
+
+    self.downscaler = self.NUMBER_OPEN + self.NUMBER_CLOSED
 
     self.LICE_TREAT_THRESHOLD = 0.5
     # Utility variables
@@ -150,13 +124,13 @@ class TEnv:
     return [self.GROWTH_CLOSED, np.log(self.NUMBER_CLOSED + 1), self.GROWTH_OPEN, np.log(self.NUMBER_OPEN + 1), self.LICE, np.log(self.PRICE)]
 
   def step(self, action: int):
-    reward = 0
+    reward = -1.0
         
     # Actions
     if action == 1:
-      reward +=  self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE
+      reward += self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE / self.downscaler
       # TODO: Remove to obtain good reward signal
-      reward -= 7 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * 100
+      reward -= 7 * (self.NUMBER_CLOSED + self.NUMBER_OPEN) * 100 / self.downscaler
       self.DONE = True
       return reward, self.DONE
 
@@ -169,10 +143,10 @@ class TEnv:
 
     # Added operating cost closed pen
     if not self.OPEN:
-      reward -= self.NUMBER_CLOSED
+      reward -= 3 * self.NUMBER_CLOSED / self.downscaler
     # Treatment cost open pen
     if self.LICE > self.LICE_TREAT_THRESHOLD:
-      reward -= self.NUMBER_OPEN
+      reward -= self.NUMBER_OPEN / self.downscaler
     
     # State vars
     self.AGE += 1/52
@@ -205,7 +179,7 @@ def main():
 
   episode_lengths = []
   move_timesteps = []
-  episodes = 50001
+  episodes = 20001
   now = time.time()
   #for ep in tqdm(range(2500)):
   for ep in tqdm(range(episodes)):
@@ -233,19 +207,20 @@ def main():
         action = 2
       if timesteps == htstep:
         action = 1
-      if False and epsilon:  
+      if epsilon:  
         action = agent.choose_action(state)
         
 
       reward, done = env.step(action)
-      reward = reward / (1000 * 100)
+      reward = reward / (100000)
 
       # Soft nudge toward correct behavior
-      if action == 2 and timesteps > 10 and timesteps < 40 and move_timestep == 0:
-        reward *= 0.5
-      if action == 1:
-        if timesteps > 60 and timesteps < 90:
-          reward += 1e5
+      if False:
+        if action == 2 and timesteps > 10 and timesteps < 40 and move_timestep == 0:
+          reward *= 0.5
+        if action == 1:
+          if timesteps > 60 and timesteps < 90:
+            reward += 1e5
       
       next_state = env.get_state()
       

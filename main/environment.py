@@ -49,14 +49,13 @@ class SalmonFarmEnv:
         self.NUMBER_OPEN = 0
         self.GROWTH_CLOSED = G_ZERO
         self.GROWTH_OPEN = 0
-        self.LICE = L_ZERO
+        self.LICE = 0.3
         self.AGE_CLOSED = 0
         self.AGE_OPEN = 0
 
         self.PRICE_GENERATOR = schwartz_two_factor_generator(100, 0.01, 0.045, 0.01, 0.1, 0.05, 0.2, 0.2, 0.8, time_step_size)
         self.PRICE = 100 #next(self.PRICE_GENERATOR)
 
-        self.TREATING = 0
         self.DONE = 0
 
         # Constants
@@ -81,10 +80,6 @@ class SalmonFarmEnv:
         self.lice_kappa, self.lice_a, self.lice_b, self.lice_phi, self.lice_sigma, self.lice_t = 0.56451781,  0.17984971,  0.05243226, -0.62917791, 0.25959416, 0
         self.LICE_TREAT_THRESHOLD = 0.5
 
-        # Utility variables
-        self.sliding_window_max = round((2/52)/self.time_step_size)
-        self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
-
         # Growth rate NN
         self.growth_model = GrowthNN(input_size=4)
         self.growth_model.load_state_dict(T.load('./models/growth/1743671011.288821-model.pt', weights_only=True))
@@ -97,10 +92,10 @@ class SalmonFarmEnv:
         self.total_cost_treatment = 0
 
     #def get_state(self):
-    #    return [self.PRICE, self.LICE, self.GROWTH_CLOSED, self.NUMBER_CLOSED, self.GROWTH_OPEN, self.NUMBER_OPEN, self.TREATING]
+    #    return [self.PRICE, self.LICE, self.GROWTH_CLOSED, self.NUMBER_CLOSED, self.GROWTH_OPEN, self.NUMBER_OPEN]
 
     def get_state(self):
-        return [self.GROWTH_CLOSED, np.log(self.NUMBER_CLOSED + 1), self.GROWTH_OPEN, np.log(self.NUMBER_OPEN + 1), self.TREATING, self.LICE, np.log(self.PRICE)]
+        return [self.GROWTH_CLOSED, np.log(self.NUMBER_CLOSED + 1), self.GROWTH_OPEN, np.log(self.NUMBER_OPEN + 1), self.LICE, np.log(self.PRICE)]
 
     def resolve_mortalityrate(self) -> float:
         categorydraw = np.random.uniform()
@@ -128,18 +123,14 @@ class SalmonFarmEnv:
     def resolve_lice(self):
         seasonal_mean = theta(self.lice_t, self.lice_a, self.lice_b, self.lice_phi)
         self.LICE = (1 - self.lice_kappa) * self.LICE + self.lice_kappa * seasonal_mean + np.random.normal(0, self.lice_sigma)**2
-    
-    def resolve_treating(self):
-        self.sliding_window_lice.pop(0)
-        self.sliding_window_lice.append(self.LICE)
-        window_exceeds = [True if x > self.LICE_TREAT_THRESHOLD else False for x in self.sliding_window_lice]
-        self.TREATING = 1.0 if any(window_exceeds) else 0.0
+
 
     def resolve_mortality(self):
         # Population loss due to treatment
-        if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD:
+        if self.NUMBER_OPEN > 0 and self.LICE > self.LICE_TREAT_THRESHOLD:
             mr = self.resolve_mortalityrate()
             self.NUMBER_OPEN = self.NUMBER_OPEN - mr * self.NUMBER_OPEN
+            self.LICE = 0
 
     def resolve_growth_closed(self):
         if self.NUMBER_CLOSED <= 0:
@@ -159,8 +150,12 @@ class SalmonFarmEnv:
         self.GROWTH_CLOSED *= np.exp(g_rate)
     
     def resolve_growth_open(self):
-        if self.NUMBER_OPEN <= 0 or self.TREATING == 1.0:
+        if self.LICE > self.LICE_TREAT_THRESHOLD:
+            self.GROWTH_OPEN -= self.GROWTH_OPEN * 0.05
             return
+        if self.NUMBER_OPEN <= 0:
+            return
+    
         explanatory = [
             round(self.AGE_OPEN), #generation_approx_age, 
             self.GROWTH_OPEN * self.feed_per_fish * 30, #feedamountperfish, 
@@ -174,14 +169,6 @@ class SalmonFarmEnv:
         g_rate = np.log(pred / self.GROWTH_OPEN) / 4.345
         self.GROWTH_OPEN *= np.exp(g_rate)
 
-    def resolve_treat_window_reset(self):
-        if self.sliding_window_lice[0] <= self.LICE_TREAT_THRESHOLD:
-          return
-        
-        self.LICE = 0.1 * self.LICE + 0.9 * self.LICE * np.random.beta(2.5, 5)
-        self.sliding_window_lice = [0 for _ in range(self.sliding_window_max)]
-        if self.NUMBER_OPEN > 0:  
-            self.sliding_window_lice[-1] = self.LICE/self.NUMBER_OPEN
 
 
     def step(self, action: int):
@@ -195,33 +182,15 @@ class SalmonFarmEnv:
         
         if not self.infinite and self.DONE:
             raise ValueError("Episode already done. Reset the environment.")
-        
-        # If action is plant => add new generation to closed pool
-        if action == 1:
-            if self.infinite:
-                # One could argue a penalty should be incurred if planting into a pen where fish already exist. Instead we rely on the repeated incurred feed/operating cost to do this.
-                self.NUMBER_CLOSED = self.N_ZERO
-                self.GROWTH_CLOSED = self.G_ZERO
-                self.AGE_CLOSED = 0
-            #reward -= self.cost_plant * self.N_ZERO
-
-        # If action is move => move closed individuals to open, reset closed
-        if action == 2:
-            #reward -= self.cost_move
-            if self.NUMBER_CLOSED > 0:
-                self.NUMBER_OPEN = self.NUMBER_CLOSED
-                self.GROWTH_OPEN = self.GROWTH_CLOSED
-                self.AGE_OPEN = self.AGE_CLOSED
-                self.NUMBER_CLOSED = 0
-                self.GROWTH_CLOSED = 0
-                self.AGE_CLOSED = 0
 
         # If action is harvest => give reward, reset open
-        if action == 3:
-            harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE
+        if action == 1:
+            harvest_revenue = self.GROWTH_OPEN * self.NUMBER_OPEN * self.PRICE / 1e6
+            
             reward += harvest_revenue
-            reward -= self.cost_harvest
-            self.total_cost_harvest += self.cost_harvest
+            
+            #reward -= self.cost_harvest
+            #self.total_cost_harvest += self.cost_harvest
             #self.GROWTH_OPEN = 0
             #self.NUMBER_OPEN = 0
             #self.AGE_OPEN = 0
@@ -236,11 +205,31 @@ class SalmonFarmEnv:
             self.AGE_CLOSED = 0
             #reward -= self.cost_plant * self.N_ZERO
 
+        # If action is move => move closed individuals to open, reset closed
+        if action == 2:
+            #reward -= self.cost_move
+            if self.NUMBER_CLOSED > 0:
+                self.NUMBER_OPEN = self.NUMBER_CLOSED
+                self.GROWTH_OPEN = self.GROWTH_CLOSED
+                self.AGE_OPEN = self.AGE_CLOSED
+                self.NUMBER_CLOSED = 0
+                self.GROWTH_CLOSED = 0
+                self.AGE_CLOSED = 0
+
+        # If action is plant => add new generation to closed pool
+        if action == 3:
+            if self.infinite:
+                # One could argue a penalty should be incurred if planting into a pen where fish already exist. Instead we rely on the repeated incurred feed/operating cost to do this.
+                self.NUMBER_CLOSED = self.N_ZERO
+                self.GROWTH_CLOSED = self.G_ZERO
+                self.AGE_CLOSED = 0
+            #reward -= self.cost_plant * self.N_ZERO
+
+
 
 
         # Update state variables
         self.resolve_lice()
-        self.resolve_treating()
         self.resolve_mortality()
         self.resolve_growth_closed()
         self.resolve_growth_open()
@@ -259,17 +248,14 @@ class SalmonFarmEnv:
         
         
         cost_treatment = 0
-        if self.sliding_window_lice[0] > self.LICE_TREAT_THRESHOLD and self.NUMBER_OPEN > 0:
+        if self.LICE > self.LICE_TREAT_THRESHOLD and self.NUMBER_OPEN > 0:
             cost_treatment = self.cost_treatment
         reward -= cost_treatment
         self.total_cost_treatment += cost_treatment
 
         cost_feed_closed = self.feed_per_fish * self.GROWTH_CLOSED * self.NUMBER_CLOSED * self.cost_feed
         cost_feed_open = self.feed_per_fish * self.GROWTH_OPEN * self.NUMBER_OPEN * self.cost_feed
-        #if action == 3:
-        #    print(cost_feed_closed)
-        #if action == 3:
-        #    print(cost_feed_open)
+        
         reward -= (cost_feed_closed + cost_feed_open)
         self.total_cost_feed += (cost_feed_closed + cost_feed_open)
 
@@ -281,8 +267,10 @@ class SalmonFarmEnv:
 
         
 
-        # Reset window of treatment occurs in current timestep (threshold reahed 2 weeks ago)
-        self.resolve_treat_window_reset()
+        # Resolve next price
+        self.PRICE = next(self.PRICE_GENERATOR)
+        
+        reward = reward / 1e4
 
         return reward, self.DONE
     
