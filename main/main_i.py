@@ -4,112 +4,136 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from agent import Actor, Critic
+from agents.q_learner_inf import Agent
+from torch import nn
+import torch as T
+from torch import optim
+from torch.nn import functional as F
+
+
+class DeepQNetwork(nn.Module):
+    def __init__(self, lr, input_dims, fc1_dims, fc2_dims,
+                 n_actions):
+        super(DeepQNetwork, self).__init__()
+        self.input_dims = input_dims
+        self.fc1_dims = fc1_dims
+        self.fc2_dims = fc2_dims
+        self.n_actions = n_actions
+        self.fc1 = nn.Linear(*self.input_dims, self.fc1_dims)
+        self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
+        self.fc3 = nn.Linear(self.fc2_dims, self.n_actions)
+
+        self.optimizer = optim.Adam(self.parameters(), lr=lr)
+        self.loss = nn.MSELoss()
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def forward(self, state):
+        x = F.relu(self.fc1(state))
+        x = F.relu(self.fc2(x))
+        actions = self.fc3(x)
+
+        return actions
 
 
 def main():
+
     env = SalmonFarmEnv(infinite=True)
-    state = torch.tensor(env.get_state(), dtype=torch.float32)
+    state = env.get_state()
+    Q_eval = DeepQNetwork(lr=0.00001, input_dims=[len(state)], fc1_dims=64, fc2_dims=64, n_actions=4)
+    state = T.tensor([state], dtype=T.float).to(Q_eval.device)
+    
+    
+    htstep = 60 #+ np.random.uniform(-0.2, 0.2)
+    mtstep = 23 #+ np.random.uniform(-0.2, 0.2)
+    ptstep = 40 #+ np.random.uniform(-0.2, 0.2)
+
+    weights_closed = []
+    weights_open = []
+    pricehist = []
+
+    max_tsteps = 10000000
+    r_bar = 0
+    
     
 
-    actor = Actor(4, len(state))
-    critic = Critic(len(state))
-    R_bar = torch.tensor(0.0)
+    for ep in tqdm(range(max_tsteps)):
 
-
-    gro = []
-    grc = []
-    no = []
-    nc = []
-    rh = []
-    ah = []
-    ii = 0   
-    
-    fix, ax = plt.subplots(3, 2)
-    forcegoodmoves = False
-    deltas_buffer_size = 200
-    deltas_buffer_idx = 0
-    deltas = torch.tensor([0 for _ in range(deltas_buffer_size)])
-
-    for ep in tqdm(range(25000)):
-
+        actions = Q_eval.forward(state)
+        action = T.argmax(actions).item()
+        action = 0
         
-        out = actor(state)
-        probs = torch.distributions.Categorical(out)
-        action = probs.sample()
+        # If action is 2, force epsilon next iteration. Select move, plant, harvest timestamp.
+        
 
-        if forcegoodmoves:
-            action = torch.tensor(0)
-            if ii == 35:
-                action = torch.tensor(2)
-                forcegoodmoves = False
-            if ii == 70:
-                action = torch.tensor(3)
-            if ii == 71:
-                action = torch.tensor(1)
-                ii = 0
+        # One case for if generation has unharvested in move, one otherwise?
+        if ep < 0.99 * max_tsteps:
+            if round(env.AGE_CLOSED, 6) == round(mtstep * 1/52, 6):
+                action = 2
+                mtstep = -1
+            if round(env.AGE_OPEN, 6) == round(ptstep * 1/52, 6):
+                action = 3
+                ptstep = -1
+            if round(env.AGE_OPEN, 6) == round(htstep * 1/52, 6):
+                
+                action = 1
+                htstep = -1
 
-        if action.item() == 2:
-            # With 20% probability, force next iteration to make good moves.
-            if np.random.random() < 0.2:
-                forcegoodmoves = True
-            ii = 0
 
-        log_probs = probs.log_prob(action)        
-    
+        # If there is no fish in any pen, force re-plant
+        if env.NUMBER_CLOSED == 0 and env.NUMBER_OPEN == 0:
+            action = 3
+        if env.AGE_CLOSED > 2:
+            action = 2
+        if env.AGE_OPEN > 3:
+            action = 1
+        
         reward, done = env.step(action)
+        reward = reward / 1e7
+        next_state =  T.tensor([env.get_state()], dtype=T.float).to(Q_eval.device)
+
+        # If age_open or age_closed greater than 2, punish (repeat success from episodic)
+        if env.AGE_OPEN > 2 or env.AGE_CLOSED > 2:
+            reward -= 10
+
+
+
+        qot1 = Q_eval.forward(state)
+        old_q = qot1[0, action]
+        qnt1 = Q_eval.forward(next_state)
+        qnt2 = T.argmax(qnt1).item()
+        new_q = qnt1[0, qnt2]
+
+        delta = reward - r_bar + new_q.detach() - old_q.detach()
+        r_bar = r_bar + 0.005 + delta.detach()
         
-
-        gro.append(env.GROWTH_OPEN)
-        grc.append(env.GROWTH_CLOSED)
-        no.append(env.NUMBER_OPEN)
-        nc.append(env.NUMBER_CLOSED)
-        rh.append(reward)
-        ah.append(action)
-        if len(gro) > 500:
-            gro.pop(0)
-            grc.pop(0)
-            no.pop(0)
-            nc.pop(0)
-            rh.pop(0)
-            ah.pop(0)
-
-        next_state = torch.tensor(env.get_state(), dtype=torch.float32)
-        
-        R_bar = torch.mean(deltas).detach()
-        delta = reward - R_bar + np.exp(-0.04) * critic(next_state) - critic.forward(state)    
-        deltas[deltas_buffer_idx] = delta
-        #R_bar = ((1 - 1e-2) * R_bar + 1e-2 * delta).detach()
-
-        critic_loss = delta**2
-        actor_loss = -torch.sum(log_probs) * delta
-        combined = actor_loss + critic_loss
-        combined.backward()
-
-        actor.opt.step(); actor.opt.zero_grad()
-        critic.opt.step(); critic.opt.zero_grad()
+        (-delta * old_q).backward()
+        Q_eval.optimizer.zero_grad()
+        Q_eval.optimizer.step()
         
         
+
+        if action == 2 and ep < 0.99 * max_tsteps:
+            htstep = np.random.randint(50, 120)            
+            ptstep = np.random.randint(htstep / 2, htstep-1)
+            mtstep = np.random.randint(0, ptstep)
+            
 
         state = next_state
+        
+        
+        weights_closed.append(env.GROWTH_CLOSED)
+        weights_open.append(env.GROWTH_OPEN)
+        pricehist.append(env.PRICE)
+        if len(weights_closed) > max_tsteps*0.01:
+            weights_closed.pop(0)
+            weights_open.pop(0)
+            pricehist.pop(0)
 
-        deltas_buffer_idx = (deltas_buffer_idx + 1) % deltas_buffer_size
-        ii = ii + 1
 
-    ax[0, 0].plot(grc)
-    ax[0, 0].set_title("Growth rate closed")
-    ax[0, 1].plot(gro)
-    ax[0, 1].set_title("Growth rate open")
-    ax[1, 0].plot(nc)
-    ax[1, 0].set_title("n closed")
-    ax[1, 1].plot(no)
-    ax[1, 1].set_title("n open")
-
-    ax[2, 0].plot(rh)
-    ax[2, 0].set_title("reward hist")
-    ax[2, 1].plot(ah)
-    ax[2, 1].set_title("action hist")
-    
+    plt.plot(weights_open, label="open")
+    plt.plot(weights_closed, label="closed")
+    plt.legend()
     plt.show()        
 
 

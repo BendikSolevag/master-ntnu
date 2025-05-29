@@ -23,11 +23,12 @@ class SalmonFarmEnv:
       - 3: harvest (terminal)
     """
     def __init__(self,
+                 closed_coefficient=1,
                  infinite=True,
                  max_time=20,
                  max_fish=1000,
                  fish_price=5.0,
-                 cost_closed= 40 * 5.1e3,
+                 cost_closed=5.1e3,
                  cost_open=5.1e3,
                  cost_treatment=1.5e5,
                  cost_plant=1e5,
@@ -39,7 +40,6 @@ class SalmonFarmEnv:
         
         N_ZERO=150000
         G_ZERO=0.2       
-        L_ZERO=150
         self.infinite = infinite
 
         # State variables
@@ -63,8 +63,10 @@ class SalmonFarmEnv:
         self.max_time = max_time
         self.max_fish = max_fish
         self.fish_price = fish_price
-        self.cost_closed = cost_closed
+        self.cost_closed = closed_coefficient * cost_closed
         self.cost_open = cost_open
+        
+
         self.cost_treatment = cost_treatment
         self.cost_plant = cost_plant
         self.cost_move = cost_move
@@ -92,9 +94,6 @@ class SalmonFarmEnv:
         self.total_cost_operation_open = 0
         self.total_cost_treatment = 0
         self.total_num_treatments = 0
-
-    #def get_state(self):
-    #    return [self.PRICE, self.LICE, self.GROWTH_CLOSED, self.NUMBER_CLOSED, self.GROWTH_OPEN, self.NUMBER_OPEN]
 
     def get_state(self):
         return [self.GROWTH_CLOSED, np.log(self.NUMBER_CLOSED + 1), self.GROWTH_OPEN, np.log(self.NUMBER_OPEN + 1), self.LICE, np.log(self.PRICE)]
@@ -179,8 +178,10 @@ class SalmonFarmEnv:
         # Iterate price to next value:
         self.PRICE = 100 #next(self.PRICE_GENERATOR)
         self.lice_t += 1/52
-        self.AGE_CLOSED += 1/52
-        self.AGE_OPEN += 1/52
+        if self.NUMBER_CLOSED > 0:
+            self.AGE_CLOSED += 1/52
+        if self.NUMBER_OPEN > 0:
+            self.AGE_OPEN += 1/52
         
         if not self.infinite and self.DONE:
             raise ValueError("Episode already done. Reset the environment.")
@@ -191,18 +192,14 @@ class SalmonFarmEnv:
             reward += harvest_revenue
             reward -= self.cost_harvest
             self.total_cost_harvest += self.cost_harvest
-            #self.GROWTH_OPEN = 0
-            #self.NUMBER_OPEN = 0
-            #self.AGE_OPEN = 0
-            self.DONE = 1
-
+            self.GROWTH_OPEN = 0
+            self.NUMBER_OPEN = 0
+            self.AGE_OPEN = 0
+            
             if not self.infinite:
+                self.DONE = 1
                 return reward, self.DONE
 
-            # If infinite, immediately plant new generation
-            self.NUMBER_CLOSED = self.N_ZERO
-            self.GROWTH_CLOSED = self.G_ZERO
-            self.AGE_CLOSED = 0
             #reward -= self.cost_plant * self.N_ZERO
 
         # If action is move => move closed individuals to open, reset closed
@@ -269,7 +266,7 @@ class SalmonFarmEnv:
         
 
         # Resolve next price
-        self.PRICE = next(self.PRICE_GENERATOR)
+        self.PRICE = 100 #next(self.PRICE_GENERATOR)
         # Reset lice
         if self.LICE > self.LICE_TREAT_THRESHOLD:
             self.LICE = 0
@@ -314,7 +311,7 @@ def schwartz_two_factor_generator(P0, delta0, r, lambda_, kappa, alpha, sigma1, 
         delta_t += kappa * (alpha - delta_t) * dt + sigma2 * dZ2
 
         # Update spot price (Geometric Brownian motion with convenience yield)
-        P_t *= np.exp((lambda_ - delta_t - 0.5 * sigma1 ** 2) * dt + sigma1 * dZ1)
+        P_t *= np.exp( sigma1 * dZ1)
 
         yield P_t 
     
