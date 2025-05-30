@@ -4,7 +4,6 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from agents.q_learner_inf import Agent
 from torch import nn
 import torch as T
 from torch import optim
@@ -42,6 +41,7 @@ def main():
     state = env.get_state()
     lr = 0.001
     Q_eval = DeepQNetwork(lr=lr, input_dims=[len(state)], fc1_dims=64, fc2_dims=64, n_actions=4)
+    Q_eval.load_state_dict(T.load(f'./models/agent/infhor/q-1'))
     state = T.tensor([state], dtype=T.float).to(Q_eval.device)
     
     
@@ -54,19 +54,13 @@ def main():
     pricehist = []
     actionhist = []
 
-    max_tsteps = 10000000
-    r_bar = 0
-    maximum_r_bar = -1 * float('inf')
-    epsilon = True
-
+    max_tsteps = 1000
+    epsilon = False
+    
     for ep in tqdm(range(max_tsteps)):
 
         actions = Q_eval.forward(state)
         action = T.argmax(actions).item()
-
-        
-        
-        # If action is 2, force epsilon next iteration. Select move, plant, harvest timestamp.
         
 
         # One case for if generation has unharvested in move, one otherwise?
@@ -103,32 +97,6 @@ def main():
             reward -= 10
 
 
-
-        q_pred = Q_eval.forward(state)[0, action]
-        
-        with torch.no_grad():
-            q_next = Q_eval(next_state).max()
-
-        delta = reward - r_bar + q_next - q_pred
-        loss = 0.5 * delta.pow(2)
-
-        
-        Q_eval.optimizer.zero_grad()
-        loss.backward()
-        Q_eval.optimizer.step()
-
-
-        r_bar = (1 - lr) * r_bar + lr * delta.item()
-
-        if ep > 0 and ep % 10000 == 0:
-            if r_bar > maximum_r_bar:
-                maximum_r_bar = r_bar
-                print('new r bar max: ', maximum_r_bar)
-                T.save(Q_eval.state_dict(), f'./models/agent/infhor/q-{closed_coefficient}')
-            print(r_bar)
-        
-        
-
         if action == 2:# and ep < 0.99 * max_tsteps:
             epsilon = np.random.uniform() < 0.15
             htstep = np.random.randint(50, 120)            
@@ -143,11 +111,7 @@ def main():
         weights_open.append(env.GROWTH_OPEN)
         pricehist.append(env.PRICE)
         actionhist.append(action)
-        if len(weights_closed) > max_tsteps*0.01:
-            weights_closed.pop(0)
-            weights_open.pop(0)
-            pricehist.pop(0)
-            actionhist.pop(0)
+        
 
     fig, ax = plt.subplots(2, 1)
 

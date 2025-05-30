@@ -220,7 +220,7 @@ class SalmonFarmEnv:
                 self.NUMBER_CLOSED = self.N_ZERO
                 self.GROWTH_CLOSED = self.G_ZERO
                 self.AGE_CLOSED = 0
-            #reward -= self.cost_plant * self.N_ZERO
+            reward -= self.cost_plant * self.N_ZERO
 
 
 
