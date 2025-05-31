@@ -90,8 +90,11 @@ class Agent:
                 self.terminal_memory[batch]).to(self.Q_eval.device)
 
         q_eval = self.Q_eval.forward(state_batch)[batch_index, action_batch]
-        q_next = self.Q_eval.forward(new_state_batch)
-        q_next[terminal_batch] = 0.0
+        with T.no_grad():
+            q_next = self.Q_eval(new_state_batch)
+            q_next[terminal_batch] = 0.0
+        #q_next = self.Q_eval.forward(new_state_batch)
+        
 
         q_target = reward_batch + self.gamma*T.max(q_next, dim=1)[0]
 

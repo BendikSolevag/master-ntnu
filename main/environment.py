@@ -204,7 +204,7 @@ class SalmonFarmEnv:
 
         # If action is move => move closed individuals to open, reset closed
         if action == 2:
-            #reward -= self.cost_move
+            reward -= self.cost_move
             if self.NUMBER_CLOSED > 0:
                 self.NUMBER_OPEN = self.NUMBER_CLOSED
                 self.GROWTH_OPEN = self.GROWTH_CLOSED
@@ -220,7 +220,7 @@ class SalmonFarmEnv:
                 self.NUMBER_CLOSED = self.N_ZERO
                 self.GROWTH_CLOSED = self.G_ZERO
                 self.AGE_CLOSED = 0
-            reward -= self.cost_plant * self.N_ZERO
+            reward -= (self.cost_plant * self.N_ZERO) / 1000
 
 
 

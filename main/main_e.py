@@ -25,6 +25,7 @@ def main(closed_coefficient):
     top_run_return = 0
     maxep = 0.5
     episodes = 10000
+    
     for ep in tqdm(range(episodes)):
         total_reward = 0
         timesteps = 0

@@ -1,161 +1,131 @@
-import torch
+
 from environment import SalmonFarmEnv
-import time
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from agents.q_learner_inf import Agent
-from torch import nn
+from agents.q_learner import Agent
 import torch as T
-from torch import optim
-from torch.nn import functional as F
 
 
-class DeepQNetwork(nn.Module):
-    def __init__(self, lr, input_dims, fc1_dims, fc2_dims,
-                 n_actions):
-        super(DeepQNetwork, self).__init__()
-        self.input_dims = input_dims
-        self.fc1_dims = fc1_dims
-        self.fc2_dims = fc2_dims
-        self.n_actions = n_actions
-        self.fc1 = nn.Linear(*self.input_dims, self.fc1_dims)
-        self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)
-        self.fc3 = nn.Linear(self.fc2_dims, self.n_actions)
 
-        self.optimizer = optim.Adam(self.parameters(), lr=lr)
-        self.loss = nn.MSELoss()
-        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
-        self.to(self.device)
 
-    def forward(self, state):
-        x = F.relu(self.fc1(state))
-        x = F.relu(self.fc2(x))
-        actions = self.fc3(x)
-
-        return actions
 
 
 def main():
     closed_coefficient = 1
     env = SalmonFarmEnv(infinite=True, closed_coefficient=closed_coefficient)
     state = env.get_state()
-    lr = 0.001
-    Q_eval = DeepQNetwork(lr=lr, input_dims=[len(state)], fc1_dims=64, fc2_dims=64, n_actions=4)
-    state = T.tensor([state], dtype=T.float).to(Q_eval.device)
     
+    agent = Agent(gamma=0.99, lr=0.000001, input_dims=[len(state)], batch_size=4, n_actions=4)
+    agent.Q_eval.load_state_dict(T.load('./models/agent/episodic/q-1.pt'))
+    state = env.get_state()
     
-    htstep = 60 #+ np.random.uniform(-0.2, 0.2)
-    mtstep = 23 #+ np.random.uniform(-0.2, 0.2)
-    ptstep = 40 #+ np.random.uniform(-0.2, 0.2)
+    htstep = 60
+    mtstep = 23
+    ptstep = 40
 
-    weights_closed = []
-    weights_open = []
-    pricehist = []
-    actionhist = []
+    
+    episodes = 1000
+    max_tsteps = 1000
+    pbar = tqdm(total=episodes*max_tsteps)
 
-    max_tsteps = 10000000
-    r_bar = 0
-    maximum_r_bar = -1 * float('inf')
-    epsilon = True
 
-    for ep in tqdm(range(max_tsteps)):
+    trews = []
 
-        actions = Q_eval.forward(state)
-        action = T.argmax(actions).item()
+    top_avg_period = -1 * float('inf')
 
-        
-        
-        # If action is 2, force epsilon next iteration. Select move, plant, harvest timestamp.
-        
+    for ep in range(episodes):
+        env = SalmonFarmEnv(infinite=True, closed_coefficient=closed_coefficient)
+        total_reward = 0
+        open_growthlist = []
+        closed_growthlist = []
+        open_agelist = []
+        closed_agelist = []
+        actionlist = []
+        epsilon = True
+        for ts in range(max_tsteps):
+            pbar.update(1)
 
-        # One case for if generation has unharvested in move, one otherwise?
-        if epsilon: #ep < 0.99 * max_tsteps:
-            action = 0
-            if round(env.AGE_CLOSED, 6) == round(mtstep * 1/52, 6):
-                action = 2
-                mtstep = -1
-            if round(env.AGE_OPEN, 6) == round(ptstep * 1/52, 6):
+            action = agent.choose_action(state)
+
+            # One case for if generation has unharvested in move, one otherwise?
+            if epsilon: #ep < 0.99 * max_tsteps:
+                action = 0
+                if round(env.AGE_CLOSED, 6) == round(mtstep * 1/52, 6):
+                    action = 2
+                if round(env.AGE_OPEN, 6) == round(ptstep * 1/52, 6):
+                    action = 3
+                if round(env.AGE_OPEN, 6) == round(htstep * 1/52, 6):
+                    action = 1
+
+
+            # If there is no fish in any pen, force re-plant
+            if env.NUMBER_CLOSED == 0 and env.NUMBER_OPEN == 0:
                 action = 3
-                ptstep = -1
-            if round(env.AGE_OPEN, 6) == round(htstep * 1/52, 6):
-                
+
+            # soft weight limits
+            if env.AGE_CLOSED > 2:
+                action = 2
+            if env.AGE_OPEN > 3:
                 action = 1
-                htstep = -1
-
-
-        # If there is no fish in any pen, force re-plant
-        if env.NUMBER_CLOSED == 0 and env.NUMBER_OPEN == 0:
-            action = 3
-
-        # soft weight limits
-        if env.AGE_CLOSED > 2:
-            action = 2
-        if env.AGE_OPEN > 3:
-            action = 1
-        
-        reward, done = env.step(action)
-        reward = reward / 1e7
-        next_state =  T.tensor([env.get_state()], dtype=T.float).to(Q_eval.device)
-
-        # If age_open or age_closed greater than 2, punish (repeat success from episodic)
-        if env.AGE_OPEN > 2 or env.AGE_CLOSED > 2:
-            reward -= 10
-
-
-
-        q_pred = Q_eval.forward(state)[0, action]
-        
-        with torch.no_grad():
-            q_next = Q_eval(next_state).max()
-
-        delta = reward - r_bar + q_next - q_pred
-        loss = 0.5 * delta.pow(2)
-
-        
-        Q_eval.optimizer.zero_grad()
-        loss.backward()
-        Q_eval.optimizer.step()
-
-
-        r_bar = (1 - lr) * r_bar + lr * delta.item()
-
-        if ep > 0 and ep % 10000 == 0:
-            if r_bar > maximum_r_bar:
-                maximum_r_bar = r_bar
-                print('new r bar max: ', maximum_r_bar)
-                T.save(Q_eval.state_dict(), f'./models/agent/infhor/q-{closed_coefficient}')
-            print(r_bar)
-        
-        
-
-        if action == 2:# and ep < 0.99 * max_tsteps:
-            epsilon = np.random.uniform() < 0.15
-            htstep = np.random.randint(50, 120)            
-            ptstep = np.random.randint(htstep / 2, htstep-1)
-            mtstep = np.random.randint(0, ptstep)
             
 
-        state = next_state
+            
+            reward, done = env.step(action)
+            reward = reward / 1e7
+            total_reward += reward
+            
+
+            # If age_open or age_closed greater than 2, punish (repeat success from episodic)
+            if env.AGE_OPEN > 2 or env.AGE_CLOSED > 2:
+                reward -= 10
+            
+            
+            next_state = env.get_state()
+            agent.store_transition(state, action, reward, next_state, done)
+            agent.learn()
+            
+            if action == 2:# and ep < 0.99 * max_tsteps:
+                epsilon = np.random.uniform() < 0.1
+                htstep = np.random.randint(50, 120)            
+                ptstep = np.random.randint(htstep / 2, htstep-1)
+                mtstep = np.random.randint(0, ptstep)
+                
+
+            state = next_state
+            open_growthlist.append(env.GROWTH_OPEN)
+            closed_growthlist.append(env.GROWTH_CLOSED)
+            open_agelist.append(env.AGE_OPEN)
+            closed_agelist.append(env.AGE_CLOSED)
+            actionlist.append(action)
         
         
-        weights_closed.append(env.GROWTH_CLOSED)
-        weights_open.append(env.GROWTH_OPEN)
-        pricehist.append(env.PRICE)
-        actionhist.append(action)
-        if len(weights_closed) > max_tsteps*0.01:
-            weights_closed.pop(0)
-            weights_open.pop(0)
-            pricehist.pop(0)
-            actionhist.pop(0)
+        if False:
+            fig, ax = plt.subplots(3, 1)
+            ax[0].plot(open_growthlist)
+            ax[0].plot(closed_growthlist)
+            ax[1].plot(actionlist)
+            ax[2].plot(open_agelist)
+            ax[2].plot(closed_agelist)
+            plt.show()
+            return
+        
+        #print(actionlist)
 
-    fig, ax = plt.subplots(2, 1)
+        trews.append(total_reward)
 
-    ax[0].plot(weights_open, label="open")
-    ax[0].plot(weights_closed, label="closed")
-    ax[1].plot(actionhist)
+        
+        if len(trews) > 10:
+            meanrew = np.mean(trews[-10:])
+            if meanrew > top_avg_period:
+                top_avg_period = meanrew
+                print('new top mean', top_avg_period)
+                T.save(agent.Q_eval.state_dict(), './models/agent/infhor/q-1.pt')
+            
+    plt.plot(trews)
     plt.legend()
-    plt.show()        
+    plt.show()
+
 
 
 
