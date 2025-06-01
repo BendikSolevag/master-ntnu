@@ -23,6 +23,7 @@ class SalmonFarmEnv:
       - 3: harvest (terminal)
     """
     def __init__(self,
+                 only_open=False,
                  closed_coefficient=1,
                  infinite=True,
                  max_time=20,
@@ -43,6 +44,7 @@ class SalmonFarmEnv:
         self.infinite = infinite
 
         # State variables
+        self.only_open = only_open
         self.N_ZERO = N_ZERO
         self.G_ZERO = G_ZERO
         self.NUMBER_CLOSED = N_ZERO
@@ -127,13 +129,20 @@ class SalmonFarmEnv:
 
 
     def resolve_mortality(self):
+        mr = self.resolve_mortalityrate()
         # Population loss due to treatment
         if self.NUMBER_OPEN > 0 and self.LICE > self.LICE_TREAT_THRESHOLD:
-            mr = self.resolve_mortalityrate()
+            
             self.NUMBER_OPEN = self.NUMBER_OPEN - mr * self.NUMBER_OPEN
+        if self.only_open:
+            self.NUMBER_CLOSED = self.NUMBER_CLOSED - mr * self.NUMBER_CLOSED
             
 
     def resolve_growth_closed(self):
+        if self.only_open and self.LICE > self.LICE_TREAT_THRESHOLD:
+            self.GROWTH_OPEN -= self.GROWTH_OPEN * 0.05
+            return
+
         if self.NUMBER_CLOSED <= 0:
             return
         # Closed
@@ -236,17 +245,21 @@ class SalmonFarmEnv:
         # Apply costs
         #
         cost_operation = 0
-        if self.NUMBER_CLOSED > 0:
+        if not self.only_open and self.NUMBER_CLOSED > 0:
             cost_operation += self.cost_closed
             self.total_cost_operation_closed += cost_operation
+
         if self.NUMBER_OPEN > 0: 
             cost_operation += self.cost_open
+            if self.only_open:
+                cost_operation += self.cost_open
             self.total_cost_operation_open += cost_operation
+
         reward -= cost_operation
 
         
         cost_treatment = 0
-        if self.LICE > self.LICE_TREAT_THRESHOLD and self.NUMBER_OPEN > 0:
+        if self.LICE > self.LICE_TREAT_THRESHOLD and (self.NUMBER_OPEN > 0 or self.only_open):
             cost_treatment = self.cost_treatment
         reward -= cost_treatment
         self.total_cost_treatment += cost_treatment
@@ -266,7 +279,7 @@ class SalmonFarmEnv:
         
 
         # Resolve next price
-        self.PRICE = 100 #next(self.PRICE_GENERATOR)
+        self.PRICE = next(self.PRICE_GENERATOR)
         # Reset lice
         if self.LICE > self.LICE_TREAT_THRESHOLD:
             self.LICE = 0

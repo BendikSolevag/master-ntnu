@@ -11,13 +11,13 @@ import torch as T
 
 
 
-def main():
-    closed_coefficient = 1
+def main(closed_coefficient):
+    
     env = SalmonFarmEnv(infinite=True, closed_coefficient=closed_coefficient)
     state = env.get_state()
     
-    agent = Agent(gamma=0.99, lr=0.000001, input_dims=[len(state)], batch_size=4, n_actions=4)
-    agent.Q_eval.load_state_dict(T.load('./models/agent/episodic/q-1.pt'))
+    agent = Agent(gamma=0.995, lr=0.000001, input_dims=[len(state)], batch_size=4, n_actions=4)
+    #agent.Q_eval.load_state_dict(T.load(f'./models/agent/episodic/q-{closed_coefficient}.pt'))
     state = env.get_state()
     
     htstep = 60
@@ -25,8 +25,8 @@ def main():
     ptstep = 40
 
     
-    episodes = 1000
-    max_tsteps = 1000
+    episodes = 2500
+    max_tsteps = 2000
     pbar = tqdm(total=episodes*max_tsteps)
 
 
@@ -115,20 +115,26 @@ def main():
         trews.append(total_reward)
 
         
-        if len(trews) > 10:
-            meanrew = np.mean(trews[-10:])
+        if len(trews) > 50:
+            meanrew = np.mean(trews[-50:])
             if meanrew > top_avg_period:
                 top_avg_period = meanrew
-                print('new top mean', top_avg_period)
-                T.save(agent.Q_eval.state_dict(), './models/agent/infhor/q-1.pt')
+                T.save(agent.Q_eval.state_dict(), f'./models/agent/infhor/q-{closed_coefficient}.pt')
             
-    plt.plot(trews)
-    plt.legend()
-    plt.show()
+    #plt.plot(trews)
+    #plt.ylabel("Total reward")
+    #plt.xlabel("Episode")
+    #plt.savefig('./illustrations/results/infhor/train-convergence.png', format="png")
+    #plt.show()
+    #plt.close()
+    
 
 
 
 
 
 if __name__ == "__main__":
-    main()
+    closed_coefficients = [1, 2, 3, 4, 6, 8, 10, 12]
+    for coef in closed_coefficients:
+        main(coef)
+ 

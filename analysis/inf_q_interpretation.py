@@ -31,7 +31,7 @@ class DeepQNetwork(nn.Module):
 
 
 class Agent:
-    def __init__(self, gamma=0, lr=0, input_dims=[6], batch_size=1, n_actions=4,
+    def __init__(self, gamma, lr, input_dims, batch_size, n_actions,
                  max_mem_size=100000):
         self.gamma = gamma
         self.lr = lr
@@ -65,14 +65,69 @@ class Agent:
 
     def choose_action(self, observation):
         state = T.tensor([observation], dtype=T.float).to(self.Q_eval.device)
-        actions = self.Q_eval.forward(state)
-        print(actions)
-        action = T.argmax(actions).item()
-        return action
+        q_vals = self.Q_eval.forward(state)
+        action = T.argmax(q_vals).item()
+        return action, q_vals
+
+    def learn(self):
+        if self.mem_cntr < self.batch_size:
+            return
+
+        self.Q_eval.optimizer.zero_grad()
+
+        max_mem = min(self.mem_cntr, self.mem_size)
+
+        batch = np.random.choice(max_mem, self.batch_size, replace=False)
+        batch_index = np.arange(self.batch_size, dtype=np.int32)
+
+        state_batch = T.tensor(self.state_memory[batch]).to(self.Q_eval.device)
+        new_state_batch = T.tensor(
+                self.new_state_memory[batch]).to(self.Q_eval.device)
+        action_batch = self.action_memory[batch]
+        reward_batch = T.tensor(
+                self.reward_memory[batch]).to(self.Q_eval.device)
+        terminal_batch = T.tensor(
+                self.terminal_memory[batch]).to(self.Q_eval.device)
+
+        q_eval = self.Q_eval.forward(state_batch)[batch_index, action_batch]
+        with T.no_grad():
+            q_next = self.Q_eval(new_state_batch)
+            q_next[terminal_batch] = 0.0
+        #q_next = self.Q_eval.forward(new_state_batch)
+        
+
+        q_target = reward_batch + self.gamma*T.max(q_next, dim=1)[0]
+
+        loss = self.Q_eval.loss(q_target, q_eval).to(self.Q_eval.device)
+        loss.backward()
+        self.Q_eval.optimizer.step()
+
+        self.iter_cntr += 1
+
+agent = Agent(gamma=0.99, lr=0.000001, input_dims=[6], batch_size=4, n_actions=4)
+
+agent.Q_eval.load_state_dict(T.load('./models/agent/infhor/q-1.pt'))
 
 
-agent = Agent()
-agent.Q_eval.load_state_dict(T.load('./models/agent/episodic/q-4.pt'))
-#[self.GROWTH_CLOSED, np.log(self.NUMBER_CLOSED + 1), self.GROWTH_OPEN, np.log(self.NUMBER_OPEN + 1), self.LICE, np.log(self.PRICE)]
 
-agent.choose_action([0, 0, 7.65, np.log(150000 + 1), 0.3, np.log(100)])
+weights = np.linspace(4.5, 6, 100)   # 100 values, inclusive of 4 and 6
+prices = []
+
+for w in weights:
+
+    price = 0
+    while True:
+        price += 1
+
+        state = [w - 0.1, np.log(15000), w, np.log(15000), 0.30, np.log(price)]
+        action, q_vals = agent.choose_action(state)
+        if action == 1:
+            break
+
+        if price > 1000:
+            break
+    prices.append(price)
+
+from matplotlib import pyplot as plt
+plt.plot(weights, prices)
+plt.show()  
