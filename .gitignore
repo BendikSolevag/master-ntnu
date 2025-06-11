@@ -1,0 +1,6 @@
+__pycache__/
+assets/
+data/
+illustrations/
+main/__pycache__/
+.DS_STORE
